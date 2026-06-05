@@ -174,6 +174,41 @@ Check whether a workspace is busy or idle.
 
 ---
 
+### `workspace_wait_idle`
+Block until the workspace becomes idle or the timeout elapses. Polls pane output internally so the caller makes a single tool call instead of polling repeatedly.
+
+**Inputs:**
+- `id` (string, required)
+- `timeout_ms` (int, optional, default `600000` = 10 min) — maximum time to wait
+- `threshold_ms` (int, optional) — idle-stability threshold override
+- `poll_interval_ms` (int, optional, default `500`) — how often to sample the pane
+
+**Output (success — workspace became idle):**
+```json
+{
+  "idle": true,
+  "timed_out": false,
+  "last_changed_at": "2026-06-05T11:30:00Z",
+  "elapsed_ms": 5200,
+  "threshold_ms": 5000
+}
+```
+
+**Output (timeout elapsed before idle):**
+```json
+{
+  "idle": false,
+  "timed_out": true,
+  "last_changed_at": "2026-06-05T11:29:55Z",
+  "elapsed_ms": 600000,
+  "threshold_ms": 5000
+}
+```
+
+**Hard errors** (workspace not found, not active, or pane capture failure) are returned as MCP tool errors, not JSON.
+
+---
+
 ### `workspace_attach_hint`
 Return the shell command to attach to a workspace's tmux session.
 
@@ -234,7 +269,7 @@ Human ──► tmux attach-session -t harness-<name>  (at any time)
 
 1. Call `workspace_create {name: "feat-foo"}` → workspace created, Claude Code launches.
 2. Call `workspace_send {id: ..., text: "Implement feature X"}` → prompt sent.
-3. Poll `workspace_idle {id: ...}` every few seconds until `Idle: true`.
+3. Call `workspace_wait_idle {id: ..., timeout_ms: 600000}` → blocks until Claude Code finishes (or times out).
 4. Call `workspace_read {id: ..., lines: 500}` to retrieve output.
 5. Optionally attach (`tmux attach-session -t harness-feat-foo`) to verify.
 6. Call `workspace_archive {id: ...}` when done.

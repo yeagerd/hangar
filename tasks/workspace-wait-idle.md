@@ -79,8 +79,8 @@ Default timeout: **10 minutes** (600 000 ms). Client may override via
 
 ## 4. Documentation
 
-- [ ] Update `README.md` tool table to include `workspace_wait_idle` with its parameters and return shape.
-- [ ] Add an example JSON response block showing both the success (`timed_out: false`) and timeout (`timed_out: true`) cases.
+- [x] Update `README.md` tool table to include `workspace_wait_idle` with its parameters and return shape.
+- [x] Add an example JSON response block showing both the success (`timed_out: false`) and timeout (`timed_out: true`) cases.
 
 ---
 
