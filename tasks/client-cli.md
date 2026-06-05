@@ -62,7 +62,7 @@ Each subcommand follows the same pattern:
 
 ### 3a — `list`
 
-- [ ] Implement `client/cmd_list.go`: subcommand `list`.
+- [x] Implement `client/cmd_list.go`: subcommand `list`.
   - Flags: `--include-archived` (bool, default false), `--repo <alias>` (string,
     default "").
   - MCP tool: `workspace_list`.
