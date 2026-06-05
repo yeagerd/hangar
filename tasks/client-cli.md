@@ -79,7 +79,7 @@ Each subcommand follows the same pattern:
 
 ### 3c — `archive`
 
-- [ ] Implement `client/cmd_archive.go`: subcommand `archive <id>`.
+- [x] Implement `client/cmd_archive.go`: subcommand `archive <id>`.
   - Positional arg: `id` (required).
   - MCP tool: `workspace_archive`.
   - Output: single-workspace summary; honours `--json`.
