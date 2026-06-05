@@ -8,8 +8,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	mcpclient "github.com/mark3labs/mcp-go/client"
+	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -26,7 +28,23 @@ func connect(ctx context.Context, binary, configPath string) (*mcpclient.Client,
 		args = append(args, "--config", configPath)
 	}
 
-	c, err := mcpclient.NewStdioMCPClient(binary, nil, args...)
+	// Strip HARNESS_* env vars so parent-shell config doesn't conflict with
+	// the config file we're passing explicitly.
+	cmdFunc := transport.WithCommandFunc(func(
+		fCtx context.Context, command string, env []string, fArgs []string,
+	) (*exec.Cmd, error) {
+		cmd := exec.CommandContext(fCtx, command, fArgs...)
+		filtered := make([]string, 0, len(os.Environ()))
+		for _, e := range os.Environ() {
+			if !strings.HasPrefix(e, "HARNESS_") {
+				filtered = append(filtered, e)
+			}
+		}
+		cmd.Env = append(filtered, env...)
+		return cmd, nil
+	})
+
+	c, err := mcpclient.NewStdioMCPClientWithOptions(binary, nil, args, cmdFunc)
 	if err != nil {
 		return nil, nil, fmt.Errorf("starting tmux-harness: %w", err)
 	}

@@ -195,15 +195,15 @@ Each subcommand follows the same pattern:
 
 ## Phase 7 — Integration
 
-- [ ] Add an integration test `client/integration_test.go` (build tag `integration`)
+- [x] Add an integration test `client/integration_test.go` (build tag `integration`)
   that:
   - Builds `bin/tmux-harness` and `bin/harness-client` via `exec.Command("go",
     "build", ...)`.
   - Calls `harness-client list` against a temp config with an empty store.
   - Asserts exit code 0 and empty (or header-only) output.
-- [ ] Run `HARNESS_INTEGRATION=1 go test -race -tags integration ./client/...` — must
+- [x] Run `HARNESS_INTEGRATION=1 go test -race -tags integration ./client/...` — must
   pass.
-- [ ] `make build` produces both `bin/tmux-harness` and `bin/harness-client` — confirm
+- [x] `make build` produces both `bin/tmux-harness` and `bin/harness-client` — confirm
   with `ls bin/`.
 
 ---
