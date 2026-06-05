@@ -133,7 +133,7 @@ Each subcommand follows the same pattern:
 
 ### 3i — `attach-hint`
 
-- [ ] Implement `client/cmd_attach_hint.go`: subcommand `attach-hint <id>`.
+- [x] Implement `client/cmd_attach_hint.go`: subcommand `attach-hint <id>`.
   - Positional arg: `id` (required).
   - MCP tool: `workspace_attach_hint`.
   - Output: print the shell command string on stdout (plain); honours `--json`.
