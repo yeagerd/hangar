@@ -1,0 +1,22 @@
+worktree /home/user/repo
+HEAD abc1234567890abcdef1234567890abcdef123456
+branch refs/heads/main
+
+worktree /home/user/worktrees/feature-branch
+HEAD def4567890abcdef1234567890abcdef12345678
+branch refs/heads/feature-branch
+
+worktree /home/user/worktrees/detached-head
+HEAD 9876543210abcdef1234567890abcdef12345678
+detached
+
+worktree /home/user/worktrees/locked-worktree
+HEAD fedcba0987654321abcdef1234567890abcdef12
+branch refs/heads/locked-branch
+locked reason: manually locked
+
+worktree /home/user/worktrees/prunable-worktree
+HEAD 1111111111111111111111111111111111111111
+branch refs/heads/old-branch
+prunable gitdir file points to non-existent location
+

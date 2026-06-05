@@ -163,8 +163,8 @@ All packages under `internal/` are unexported to external consumers — the bina
 
 ### Checklist
 
-- [ ] Write `internal/worktree/worktree.go`. Accept the repo path as a struct field so all `git` invocations use `-C <repoPath>` to set the working directory rather than relying on the process's cwd.
-- [ ] Define a `WorktreeInfo` struct:
+- [x] Write `internal/worktree/worktree.go`. Accept the repo path as a struct field so all `git` invocations use `-C <repoPath>` to set the working directory rather than relying on the process's cwd.
+- [x] Define a `WorktreeInfo` struct:
   ```go
   type WorktreeInfo struct {
       Path    string
@@ -174,15 +174,15 @@ All packages under `internal/` are unexported to external consumers — the bina
       Prunable bool
   }
   ```
-- [ ] Implement:
+- [x] Implement:
   - `Add(worktreePath, branchName string, createBranch bool) error` — if `createBranch` is true, pass `-b branchName`; otherwise check out existing branch
   - `Remove(worktreePath string, force bool) error`
   - `List() ([]WorktreeInfo, error)` — parse `--porcelain` output into `[]WorktreeInfo`
   - `Prune() error`
-- [ ] The porcelain parser must handle all four known field types: `worktree`, `HEAD`, `branch`, `locked`, `prunable`, and the bare/detached cases. Write it as a pure function (takes a string, returns `[]WorktreeInfo`) with no exec dependency.
-- [ ] Store the porcelain parser test fixture in `test/fixtures/worktree_list_porcelain.txt` covering: main worktree, a regular worktree on a branch, a detached worktree, a locked worktree, and a prunable worktree.
-- [ ] Handle the edge case in `Add` where `worktreePath` already exists on disk but is not registered with git — surface a typed error `ErrWorktreePathExists` so the caller can decide whether to force.
-- [ ] Write unit tests for all functions using the same `Executor` interface pattern as the tmux package.
+- [x] The porcelain parser must handle all four known field types: `worktree`, `HEAD`, `branch`, `locked`, `prunable`, and the bare/detached cases. Write it as a pure function (takes a string, returns `[]WorktreeInfo`) with no exec dependency.
+- [x] Store the porcelain parser test fixture in `test/fixtures/worktree_list_porcelain.txt` covering: main worktree, a regular worktree on a branch, a detached worktree, a locked worktree, and a prunable worktree.
+- [x] Handle the edge case in `Add` where `worktreePath` already exists on disk but is not registered with git — surface a typed error `ErrWorktreePathExists` so the caller can decide whether to force.
+- [x] Write unit tests for all functions using the same `Executor` interface pattern as the tmux package.
 
 ---
 
