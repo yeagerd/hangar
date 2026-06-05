@@ -149,3 +149,74 @@ func TestCheckWithPromptHeuristic_TiebreakerBusy(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, status.Idle)
 }
+
+// toggleCapture returns alternating content on each call, then a fixed stable string.
+type toggleCapture struct {
+	calls   int
+	toggle  [2]string
+	stableN int // after this many calls, always return toggle[1]
+}
+
+func (t *toggleCapture) CapturePane(_ string, _ int) (string, error) {
+	t.calls++
+	if t.calls > t.stableN {
+		return t.toggle[1], nil
+	}
+	return t.toggle[t.calls%2], nil
+}
+
+func TestWaitUntilIdle_AlreadyIdle(t *testing.T) {
+	content := "stable output\n"
+	h := hashContent(content)
+	cap := &mockCapture{content: content}
+	upd := &mockUpdater{}
+	// Already past threshold.
+	ws := newWS(h, time.Now().Add(-10*time.Second))
+
+	status, err := WaitUntilIdle(context.Background(), ws, cap, upd, 200, 5000, 50)
+	require.NoError(t, err)
+	assert.True(t, status.Idle)
+}
+
+func TestWaitUntilIdle_BecomesIdleAfterTicks(t *testing.T) {
+	content := "stable\n"
+	h := hashContent(content)
+	cap := &mockCapture{content: content}
+	upd := &mockUpdater{}
+	// Not yet past threshold — needs ~3 polls at 50 ms each to accumulate 150 ms.
+	ws := newWS(h, time.Now().Add(-50*time.Millisecond))
+
+	start := time.Now()
+	status, err := WaitUntilIdle(context.Background(), ws, cap, upd, 150, 5000, 50)
+	require.NoError(t, err)
+	assert.True(t, status.Idle)
+	// Should have waited at least one poll interval.
+	assert.GreaterOrEqual(t, time.Since(start).Milliseconds(), int64(50))
+}
+
+func TestWaitUntilIdle_Timeout(t *testing.T) {
+	// Content keeps changing → never idle.
+	cap := &toggleCapture{toggle: [2]string{"a\n", "b\n"}, stableN: 1000}
+	upd := &mockUpdater{}
+	ws := newWS("", time.Now())
+
+	_, err := WaitUntilIdle(context.Background(), ws, cap, upd, 200, 120, 50)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
+}
+
+func TestWaitUntilIdle_CtxCancellation(t *testing.T) {
+	cap := &toggleCapture{toggle: [2]string{"a\n", "b\n"}, stableN: 1000}
+	upd := &mockUpdater{}
+	ws := newWS("", time.Now())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(80 * time.Millisecond)
+		cancel()
+	}()
+
+	_, err := WaitUntilIdle(ctx, ws, cap, upd, 200, 60_000, 50)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.Canceled)
+}

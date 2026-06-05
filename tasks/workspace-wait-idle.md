@@ -11,7 +11,7 @@ Default timeout: **10 minutes** (600 000 ms). Client may override via
 
 ## 1. `idle` package — add `WaitUntilIdle`
 
-- [ ] Add `WaitUntilIdle(ctx context.Context, ws store.Workspace, capture PaneCapture, updater WorkspaceUpdater, thresholdMs, timeoutMs, pollIntervalMs int64) (IdleStatus, error)` to `internal/idle/idle.go`.
+- [x] Add `WaitUntilIdle(ctx context.Context, ws store.Workspace, capture PaneCapture, updater WorkspaceUpdater, thresholdMs, timeoutMs, pollIntervalMs int64) (IdleStatus, error)` to `internal/idle/idle.go`.
   - Use `time.NewTicker` with `pollIntervalMs` (default 500 ms when ≤ 0).
   - On each tick call `Check(...)` exactly as `workspace_idle` does.
   - Return as soon as `IdleStatus.Idle == true`.
@@ -19,7 +19,7 @@ Default timeout: **10 minutes** (600 000 ms). Client may override via
   - Respect `ctx` cancellation in addition to the internal deadline — whichever fires first.
   - Do **not** inline the poll loop into the tool handler; keep it in the `idle` package so it is testable in isolation.
 
-- [ ] Add unit tests for `WaitUntilIdle` in `internal/idle/idle_test.go`:
+- [x] Add unit tests for `WaitUntilIdle` in `internal/idle/idle_test.go`:
   - Already-idle workspace returns immediately with `Idle: true`.
   - Workspace becomes idle after N ticks; verify it takes ≥ N×pollInterval.
   - Timeout fires before idle; verify error wraps `context.DeadlineExceeded` and `Idle` is false.

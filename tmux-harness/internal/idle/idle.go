@@ -77,6 +77,70 @@ func Check(
 	}, nil
 }
 
+// WaitUntilIdle polls the workspace pane until it becomes idle or the timeout elapses.
+// pollIntervalMs ≤ 0 defaults to 500 ms. timeoutMs ≤ 0 defaults to 600 000 ms (10 min).
+// Returns a non-nil error (wrapping context.DeadlineExceeded) on timeout or ctx cancellation.
+func WaitUntilIdle(
+	ctx context.Context,
+	ws store.Workspace,
+	capture PaneCapture,
+	updater WorkspaceUpdater,
+	thresholdMs, timeoutMs, pollIntervalMs int64,
+) (IdleStatus, error) {
+	if timeoutMs <= 0 {
+		timeoutMs = 600_000
+	}
+	if pollIntervalMs <= 0 {
+		pollIntervalMs = 500
+	}
+
+	deadline := time.Now().Add(time.Duration(timeoutMs) * time.Millisecond)
+	ctx, cancel := context.WithDeadline(ctx, deadline)
+	defer cancel()
+
+	ticker := time.NewTicker(time.Duration(pollIntervalMs) * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return IdleStatus{
+				Idle:          false,
+				LastChangedAt: ws.LastChangedAt,
+				ElapsedMs:     time.Since(ws.LastChangedAt).Milliseconds(),
+				ThresholdMs:   thresholdMs,
+			}, fmt.Errorf("wait_until_idle: timed out after %d ms: %w", timeoutMs, ctx.Err())
+		case <-ticker.C:
+			content, err := capture.CapturePane(ws.TmuxSession, 200)
+			if err != nil {
+				return IdleStatus{}, fmt.Errorf("capturing pane for %s: %w", ws.Name, err)
+			}
+			hash := hashContent(content)
+			if hash != ws.LastCaptureHash {
+				now := time.Now()
+				if err := updater.Update(ws.ID, func(w *store.Workspace) {
+					w.LastCaptureHash = hash
+					w.LastChangedAt = now
+				}); err != nil {
+					return IdleStatus{}, fmt.Errorf("updating workspace hash: %w", err)
+				}
+				ws.LastCaptureHash = hash
+				ws.LastChangedAt = now
+				continue
+			}
+			elapsed := time.Since(ws.LastChangedAt).Milliseconds()
+			if elapsed >= thresholdMs {
+				return IdleStatus{
+					Idle:          true,
+					LastChangedAt: ws.LastChangedAt,
+					ElapsedMs:     elapsed,
+					ThresholdMs:   thresholdMs,
+				}, nil
+			}
+		}
+	}
+}
+
 // hashContent returns a hex SHA-256 of the pane content.
 func hashContent(content string) string {
 	sum := sha256.Sum256([]byte(content))
