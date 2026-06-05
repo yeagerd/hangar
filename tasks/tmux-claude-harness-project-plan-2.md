@@ -401,14 +401,14 @@ Register all tools in `internal/tools/tools.go`. Each handler must:
 
 ### MCP Resource
 
-- [ ] Register an MCP resource with URI template `workspace://{id}/pane` that returns the current pane content as a text resource. Orchestrators can fetch this directly without using `workspace_read`.
+- [x] Register an MCP resource with URI template `workspace://{id}/pane` that returns the current pane content as a text resource. Orchestrators can fetch this directly without using `workspace_read`.
 - [ ] Resource list (`resources/list`) must enumerate all active workspaces with their pane URI.
 
 ### Additional Checklist
 
-- [ ] In `main.go`, construct the MCP server, call `s.AddTool(...)` for each tool, and call `server.ServeStdio(s)` to block.
-- [ ] Wrap the server in a `context.Context` that is cancelled on `SIGINT`/`SIGTERM`, giving in-flight operations up to 5 s to finish before hard exit.
-- [ ] Write a standalone smoke-test script in `cmd/smoke/main.go` that connects to the server over stdio, calls every tool in sequence, and exits non-zero on any failure. This is not part of `go test` — run it manually or in CI as a separate step.
+- [x] In `main.go`, construct the MCP server, call `s.AddTool(...)` for each tool, and call `server.ServeStdio(s)` to block.
+- [x] Wrap the server in a `context.Context` that is cancelled on `SIGINT`/`SIGTERM`, giving in-flight operations up to 5 s to finish before hard exit.
+- [x] Write a standalone smoke-test script in `cmd/smoke/main.go` that connects to the server over stdio, calls every tool in sequence, and exits non-zero on any failure. This is not part of `go test` — run it manually or in CI as a separate step.
 
 ---
 
@@ -420,13 +420,13 @@ Register all tools in `internal/tools/tools.go`. Each handler must:
 
 The `main()` function must execute the following in order:
 
-- [ ] Parse CLI flags: `--config <path>`, `--version`.
-- [ ] Load and validate config (Phase 1).
-- [ ] Initialize the store (Phase 4). If the store file is corrupt (invalid JSON), log the error and exit — do not silently overwrite.
-- [ ] Initialize the tmux and worktree clients.
-- [ ] Initialize the workspace manager.
-- [ ] Call `manager.Reconcile()` to detect orphaned workspaces. Log results to stderr.
-- [ ] Build and start the MCP server (Phase 7).
+- [x] Parse CLI flags: `--config <path>`, `--version`.
+- [x] Load and validate config (Phase 1).
+- [x] Initialize the store (Phase 4). If the store file is corrupt (invalid JSON), log the error and exit — do not silently overwrite.
+- [x] Initialize the tmux and worktree clients.
+- [x] Initialize the workspace manager.
+- [x] Call `manager.Reconcile()` to detect orphaned workspaces. Log results to stderr.
+- [x] Build and start the MCP server (Phase 7).
 
 All steps before MCP server startup must write only to `stderr`. The MCP server owns `stdout` from the moment `ServeStdio` is called.
 
