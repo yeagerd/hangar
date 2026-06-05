@@ -29,17 +29,32 @@ go build -o tmux-harness .
 
 Configuration can be supplied via a JSON file and/or environment variables. Environment variables always take priority.
 
-| Field | Env var | Default | Description |
-|-------|---------|---------|-------------|
-| `repoPath` | `HARNESS_REPO_PATH` | *(required)* | Absolute path to the git repository being managed |
-| `worktreeRoot` | `HARNESS_WORKTREE_ROOT` | `<repoPath>/../worktrees` | Directory where worktrees are created |
-| `storePath` | `HARNESS_STORE_PATH` | `~/.config/tmux-harness/workspaces.json` | Path to the JSON workspace registry |
-| `claudeCmd` | `HARNESS_CLAUDE_CMD` | `claude` | Command to launch Claude Code |
-| `idleThresholdMs` | `HARNESS_IDLE_THRESHOLD_MS` | `5000` | Milliseconds of pane inactivity before a session is "idle" |
-| `sessionPrefix` | `HARNESS_SESSION_PREFIX` | `harness-` | Prefix for tmux session names |
-| `maxWorkspaces` | `HARNESS_MAX_WORKSPACES` | `10` | Hard cap on concurrent active workspaces (1–50) |
+### Multi-repo config (recommended)
 
-**Example config file** (`harness-config.json`):
+Use the `repos` object to manage worktrees across multiple git repositories from a single binary instance:
+
+```json
+{
+  "repos": {
+    "articulant": {
+      "path": "/home/alice/github/articulant/main",
+      "worktreeRoot": "/home/alice/github/articulant/worktrees"
+    },
+    "client-app": {
+      "path": "/home/alice/github/client-app"
+    }
+  },
+  "storePath": "~/.config/tmux-harness/workspaces.json",
+  "claudeCmd": "claude",
+  "maxWorkspaces": 20
+}
+```
+
+The `worktreeRoot` field inside each repo entry is optional and defaults to `<path>/../worktrees`.
+
+### Single-repo config (legacy)
+
+For a single repository the legacy `repoPath` / `worktreeRoot` top-level fields still work:
 
 ```json
 {
@@ -48,6 +63,29 @@ Configuration can be supplied via a JSON file and/or environment variables. Envi
   "idleThresholdMs": 8000
 }
 ```
+
+### Config fields
+
+| Field | Env var | Default | Description |
+|-------|---------|---------|-------------|
+| `repos` | `HARNESS_REPOS` | — | Map of alias → repo entry (`path` + optional `worktreeRoot`) |
+| `repoPath` *(deprecated)* | `HARNESS_REPO_PATH` | — | Single-repo path; synthesises a `"default"` repos entry |
+| `worktreeRoot` *(deprecated)* | `HARNESS_WORKTREE_ROOT` | `<repoPath>/../worktrees` | Single-repo worktree root |
+| `storePath` | `HARNESS_STORE_PATH` | `~/.config/tmux-harness/workspaces.json` | Path to the JSON workspace registry |
+| `claudeCmd` | `HARNESS_CLAUDE_CMD` | `claude` | Command to launch Claude Code |
+| `idleThresholdMs` | `HARNESS_IDLE_THRESHOLD_MS` | `5000` | Milliseconds of pane inactivity before a session is "idle" |
+| `sessionPrefix` | `HARNESS_SESSION_PREFIX` | `harness-` | Prefix for tmux session names |
+| `maxWorkspaces` | `HARNESS_MAX_WORKSPACES` | `10` | Hard cap on concurrent active workspaces (1–50) |
+
+### `HARNESS_REPOS` env var format
+
+`HARNESS_REPOS` accepts a comma-separated list of `alias=path` or `alias=path:worktreeRoot` pairs:
+
+```
+HARNESS_REPOS=articulant=/home/alice/github/articulant/main,client-app=/home/alice/github/client-app:/custom/worktrees
+```
+
+Entries set via `HARNESS_REPOS` override entries of the same alias from the config file.
 
 ---
 
@@ -100,9 +138,11 @@ Generic stdio MCP entry (adjust `command` and `env` as needed):
 ### `workspace_list`
 List all workspaces. By default excludes archived and orphaned ones.
 
-**Inputs:** `include_archived` (bool, optional, default false)
+**Inputs:**
+- `include_archived` (bool, optional, default false)
+- `repo` (string, optional) — filter by repo alias; omit to list workspaces for all repos
 
-**Output:** JSON array: `[{id, name, status, branch, tmuxSession, createdAt, worktreePath}]`
+**Output:** JSON array: `[{id, name, status, branch, tmuxSession, createdAt, worktreePath, repoAlias, repoPath}]`
 
 ---
 
@@ -112,9 +152,10 @@ Create a new workspace: git worktree + tmux session + Claude Code instance.
 **Inputs:**
 - `name` (string, required) — lowercase alphanumeric and hyphens, 1–40 chars
 - `branch` (string, optional) — git branch to create; defaults to `name`
+- `repo` (string, optional) — alias of the repo to create the workspace in; defaults to the only configured repo when there is exactly one, otherwise required
 - `meta` (object, optional) — freeform string key-value metadata
 
-**Output:** Full workspace object as JSON.
+**Output:** Full workspace object as JSON (includes `repoAlias` and `repoPath`).
 
 ---
 
@@ -287,9 +328,10 @@ On startup, `tmux-harness` reconciles the workspace registry against live tmux s
 
 ## Known Limitations
 
-- One git repository per server instance. Use separate binaries for multiple repos.
 - No authentication on the stdio transport. Secure your process environment.
 - Idle detection is heuristic (hash-based); a session that produces the same output repeatedly may appear idle prematurely.
+- `maxWorkspaces` is a global cap across all repos, not a per-repo limit.
+- tmux session names are globally prefixed (`harness-<name>`); if two repos have a workspace with the same name, they would share a session name. Plan accordingly or use distinct names per repo.
 
 ---
 
