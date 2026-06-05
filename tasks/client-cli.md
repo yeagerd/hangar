@@ -122,7 +122,7 @@ Each subcommand follows the same pattern:
 
 ### 3h — `wait-idle`
 
-- [ ] Implement `client/cmd_wait_idle.go`: subcommand `wait-idle <id>`.
+- [x] Implement `client/cmd_wait_idle.go`: subcommand `wait-idle <id>`.
   - Positional arg: `id` (required).
   - Flags: `--timeout-ms <n>` (int64, default 0), `--threshold-ms <n>` (int64,
     default 0), `--poll-interval-ms <n>` (int64, default 0). Zero values are omitted
