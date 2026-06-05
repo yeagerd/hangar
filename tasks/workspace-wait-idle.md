@@ -30,7 +30,7 @@ Default timeout: **10 minutes** (600 000 ms). Client may override via
 
 ## 2. `tools` package — register `workspace_wait_idle`
 
-- [ ] In `internal/tools/tools.go`, inside `Register(...)`, add a new `workspace_wait_idle` tool after `workspace_idle`:
+- [x] In `internal/tools/tools.go`, inside `Register(...)`, add a new `workspace_wait_idle` tool after `workspace_idle`:
 
   ```go
   s.AddTool(mcp.NewTool("workspace_wait_idle",
@@ -52,7 +52,7 @@ Default timeout: **10 minutes** (600 000 ms). Client may override via
   ), ...)
   ```
 
-- [ ] Handler logic:
+- [x] Handler logic:
   - Resolve `timeout_ms` → default `600_000`.
   - Resolve `threshold_ms` → default `defaultThresholdMs` (passed into `Register`).
   - Resolve `poll_interval_ms` → default `500`.
@@ -61,9 +61,9 @@ Default timeout: **10 minutes** (600 000 ms). Client may override via
   - On success: return `IdleStatus` JSON with an added `"timed_out": false` field.
   - On timeout/cancellation error: return `IdleStatus`-shaped JSON with `"idle": false, "timed_out": true` — **not** a tool error, so the client can distinguish timeout from a hard failure. Hard failures (pane capture error, store error) still return `mcp.NewToolResultError`.
 
-- [ ] Define a `waitIdleResult` struct (or embed `idle.IdleStatus` + `TimedOut bool`) to produce consistent JSON — do not inline `map[string]any`.
+- [x] Define a `waitIdleResult` struct (or embed `idle.IdleStatus` + `TimedOut bool`) to produce consistent JSON — do not inline `map[string]any`.
 
-- [ ] Add handler-level unit tests in `internal/tools/tools_test.go`:
+- [x] Add handler-level unit tests in `internal/tools/tools_test.go`:
   - Happy path: workspace already idle → returns `{idle: true, timed_out: false}`.
   - Timeout path: fake capture never changes hash, short `timeout_ms` → returns `{idle: false, timed_out: true}`.
   - Unknown workspace ID → tool error.

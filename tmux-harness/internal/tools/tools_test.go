@@ -317,6 +317,85 @@ func TestWorkspaceAttachHint(t *testing.T) {
 	assert.Equal(t, "tmux attach-session -t harness-myws", out["command"])
 }
 
+func TestWorkspaceWaitIdle_AlreadyIdle(t *testing.T) {
+	content := "stable\n"
+	h := paneHash(content)
+	ws := store.Workspace{
+		ID: "ws-1", Name: "myws", Status: store.StatusActive, TmuxSession: "harness-myws",
+		LastCaptureHash: h, LastChangedAt: time.Now().Add(-10 * time.Second),
+	}
+	mgr := &mockManager{workspaces: []store.Workspace{ws}}
+	cap := &mockPaneCapture{content: content}
+	upd := &mockStoreUpdater{data: map[string]store.Workspace{"ws-1": ws}}
+	s := newTestServer(mgr, cap, upd)
+
+	result := callTool(t, s, "workspace_wait_idle", map[string]any{
+		"id":           "ws-1",
+		"timeout_ms":   5000,
+		"threshold_ms": 200,
+	})
+	assert.False(t, result.IsError, textContent(t, result))
+	var out waitIdleResult
+	require.NoError(t, json.Unmarshal([]byte(textContent(t, result)), &out))
+	assert.True(t, out.Idle)
+	assert.False(t, out.TimedOut)
+}
+
+func TestWorkspaceWaitIdle_Timeout(t *testing.T) {
+	// Content always changes → never idle.
+	call := 0
+
+	ws := store.Workspace{
+		ID: "ws-1", Name: "myws", Status: store.StatusActive, TmuxSession: "harness-myws",
+	}
+
+	// Build a capture that returns distinct content each call.
+	capFunc := &funcCapture{fn: func() string {
+		call++
+		return fmt.Sprintf("line %d\n", call)
+	}}
+
+	mgr := &mockManager{workspaces: []store.Workspace{ws}}
+	upd := &mockStoreUpdater{data: map[string]store.Workspace{"ws-1": ws}}
+	s := newTestServer(mgr, capFunc, upd)
+
+	result := callTool(t, s, "workspace_wait_idle", map[string]any{
+		"id":              "ws-1",
+		"timeout_ms":      150,
+		"threshold_ms":    200,
+		"poll_interval_ms": 40,
+	})
+	assert.False(t, result.IsError, textContent(t, result))
+	var out waitIdleResult
+	require.NoError(t, json.Unmarshal([]byte(textContent(t, result)), &out))
+	assert.False(t, out.Idle)
+	assert.True(t, out.TimedOut)
+}
+
+func TestWorkspaceWaitIdle_NotFound(t *testing.T) {
+	s := newTestServer(&mockManager{}, &mockPaneCapture{}, &mockStoreUpdater{})
+	result := callTool(t, s, "workspace_wait_idle", map[string]any{"id": "ghost"})
+	assert.True(t, result.IsError)
+}
+
+func TestWorkspaceWaitIdle_NotActive(t *testing.T) {
+	mgr := &mockManager{workspaces: []store.Workspace{
+		{ID: "ws-1", Name: "myws", Status: store.StatusArchived},
+	}}
+	s := newTestServer(mgr, &mockPaneCapture{}, &mockStoreUpdater{})
+	result := callTool(t, s, "workspace_wait_idle", map[string]any{"id": "ws-1"})
+	assert.True(t, result.IsError)
+}
+
+// funcCapture calls a function to produce each pane snapshot.
+type funcCapture struct {
+	fn func() string
+}
+
+func (f *funcCapture) CapturePane(_ string, _ int) (string, error) {
+	return f.fn(), nil
+}
+
 func TestSanitizeText(t *testing.T) {
 	tests := []struct {
 		input    string

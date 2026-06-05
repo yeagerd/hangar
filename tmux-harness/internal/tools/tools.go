@@ -5,6 +5,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -87,6 +88,15 @@ func toSummary(ws store.Workspace) workspaceSummary {
 		CreatedAt:    ws.CreatedAt,
 		WorktreePath: ws.WorktreePath,
 	}
+}
+
+// waitIdleResult is the JSON shape returned by workspace_wait_idle.
+type waitIdleResult struct {
+	Idle          bool      `json:"idle"`
+	TimedOut      bool      `json:"timed_out"`
+	LastChangedAt time.Time `json:"last_changed_at"`
+	ElapsedMs     int64     `json:"elapsed_ms"`
+	ThresholdMs   int64     `json:"threshold_ms"`
 }
 
 func jsonText(v any) (*mcp.CallToolResult, error) {
@@ -357,6 +367,62 @@ func Register(s *server.MCPServer, mgr Manager, capture PaneCapture, storeUpd St
 		}
 
 		return jsonText(status)
+	})
+
+	// workspace_wait_idle
+	s.AddTool(mcp.NewTool("workspace_wait_idle",
+		mcp.WithDescription("Block until the workspace is idle or the timeout elapses. "+
+			"Polls pane output internally; returns the same shape as workspace_idle plus a timed_out flag."),
+		mcp.WithString("id",
+			mcp.Required(),
+			mcp.Description("Workspace ID"),
+		),
+		mcp.WithNumber("timeout_ms",
+			mcp.Description("Maximum time to wait in milliseconds (default 600000 = 10 min)"),
+		),
+		mcp.WithNumber("threshold_ms",
+			mcp.Description("Idle-stability threshold override in milliseconds"),
+		),
+		mcp.WithNumber("poll_interval_ms",
+			mcp.Description("How often to sample the pane in milliseconds (default 500)"),
+		),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		id, err := req.RequireString("id")
+		if err != nil {
+			return mcp.NewToolResultError("id is required"), nil
+		}
+
+		timeoutMs := req.GetFloat("timeout_ms", 600_000)
+		threshold := defaultThresholdMs
+		if v := req.GetFloat("threshold_ms", 0); v > 0 {
+			threshold = int64(v)
+		}
+		pollIntervalMs := req.GetFloat("poll_interval_ms", 500)
+
+		ws, err := mgr.Get(id)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("workspace not found: %s", id)), nil
+		}
+		if ws.Status != store.StatusActive {
+			return mcp.NewToolResultError(
+				fmt.Sprintf("workspace %s is not active (status: %s)", id, ws.Status),
+			), nil
+		}
+
+		status, waitErr := idle.WaitUntilIdle(ctx, ws, capture, storeUpd, threshold, int64(timeoutMs), int64(pollIntervalMs))
+		timedOut := waitErr != nil
+		if waitErr != nil && !errors.Is(waitErr, context.DeadlineExceeded) && !errors.Is(waitErr, context.Canceled) {
+			fmt.Fprintf(os.Stderr, "workspace_wait_idle: error: %v\n", waitErr)
+			return mcp.NewToolResultError(fmt.Sprintf("wait failed: %v", waitErr)), nil
+		}
+
+		return jsonText(waitIdleResult{
+			Idle:          status.Idle,
+			TimedOut:      timedOut,
+			LastChangedAt: status.LastChangedAt,
+			ElapsedMs:     status.ElapsedMs,
+			ThresholdMs:   status.ThresholdMs,
+		})
 	})
 
 	// workspace_attach_hint
