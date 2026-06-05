@@ -134,8 +134,8 @@ All packages under `internal/` are unexported to external consumers — the bina
 
 ### Checklist
 
-- [ ] Write `internal/tmux/tmux.go`. All functions must shell out using `exec.Command` (never `exec.CommandContext` with a shell string — always pass the binary and args separately to avoid injection).
-- [ ] Implement the following functions. All are `func(...) error` or `func(...) (T, error)` — never panic on failure:
+- [x] Write `internal/tmux/tmux.go`. All functions must shell out using `exec.Command` (never `exec.CommandContext` with a shell string — always pass the binary and args separately to avoid injection).
+- [x] Implement the following functions. All are `func(...) error` or `func(...) (T, error)` — never panic on failure:
   - `SessionExists(prefix, name string) (bool, error)` — runs `tmux list-sessions -F #{session_name}` and checks for `prefix+name`
   - `NewSession(sessionName, startDir string) error` — creates a detached session (`-d`) in `startDir`
   - `KillSession(sessionName string) error` — kills a session; if the session does not exist, return `nil` (not an error)
@@ -143,10 +143,10 @@ All packages under `internal/` are unexported to external consumers — the bina
   - `CapturePane(sessionName string, lines int) (string, error)` — captures the last `lines` lines of output; use `-S -<lines>` flag
   - `ListSessions(prefix string) ([]string, error)` — returns all session names that start with `prefix`
   - `RenameSession(oldName, newName string) error`
-- [ ] Define a sentinel `ErrSessionNotFound` error so callers can distinguish "session missing" from other failures.
-- [ ] Handle the case where the tmux server process is not running — the first `NewSession` call starts it implicitly; subsequent calls to `ListSessions` on an empty server should return an empty slice, not an error.
-- [ ] Write unit tests for all functions. Use an interface `Executor` (with a single `Run(name string, args ...string) ([]byte, error)` method) injected into the tmux client struct so tests can mock shell calls without actually invoking tmux. Test the happy path and at least one error path per function.
-- [ ] Write a `porcelain` parser for `list-sessions` output as a separate internal function so it can be tested with a fixture string independently of any exec call.
+- [x] Define a sentinel `ErrSessionNotFound` error so callers can distinguish "session missing" from other failures.
+- [x] Handle the case where the tmux server process is not running — the first `NewSession` call starts it implicitly; subsequent calls to `ListSessions` on an empty server should return an empty slice, not an error.
+- [x] Write unit tests for all functions. Use an interface `Executor` (with a single `Run(name string, args ...string) ([]byte, error)` method) injected into the tmux client struct so tests can mock shell calls without actually invoking tmux. Test the happy path and at least one error path per function.
+- [x] Write a `porcelain` parser for `list-sessions` output as a separate internal function so it can be tested with a fixture string independently of any exec call.
 
 ---
 
