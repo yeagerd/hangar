@@ -82,17 +82,17 @@ All packages under `internal/` are unexported to external consumers — the bina
 
 ### Checklist
 
-- [ ] Verify Go ≥ 1.22 is installed (`go version`). Document minimum version in README and `go.mod`.
-- [ ] Verify `tmux` ≥ 3.2 is installed (`tmux -V`). Document in README.
-- [ ] Verify `git` ≥ 2.35 is installed. Document in README.
-- [ ] Verify the `claude` CLI (Claude Code) is installed and `claude --version` succeeds.
-- [ ] Run `go mod init github.com/<your-org>/tmux-harness` (or an appropriate module path).
-- [ ] Add `github.com/mark3labs/mcp-go` as a dependency (`go get github.com/mark3labs/mcp-go`).
-- [ ] Add `github.com/stretchr/testify` for test assertions (`go get github.com/stretchr/testify`).
-- [ ] Set up a `Makefile` with targets: `build`, `test`, `test-integration`, `lint`, `clean`.
-- [ ] Install `golangci-lint` and add a `.golangci.yml` config with at minimum: `errcheck`, `govet`, `staticcheck`, `exhaustive`.
-- [ ] Write a trivial `main.go` that creates an `mcp-go` server, registers one no-op tool (`ping`), and serves over stdio. Confirm a client (MCP Inspector or `mcp-client` CLI) can connect and list tools.
-- [ ] Add a `.gitignore` (the `tmux-harness` binary, any `*.worktree` dirs, `config.json` if local).
+- [x] Verify Go ≥ 1.22 is installed (`go version`). Document minimum version in README and `go.mod`.
+- [x] Verify `tmux` ≥ 3.2 is installed (`tmux -V`). Document in README.
+- [x] Verify `git` ≥ 2.35 is installed. Document in README.
+- [x] Verify the `claude` CLI (Claude Code) is installed and `claude --version` succeeds.
+- [x] Run `go mod init github.com/<your-org>/tmux-harness` (or an appropriate module path).
+- [x] Add `github.com/mark3labs/mcp-go` as a dependency (`go get github.com/mark3labs/mcp-go`).
+- [x] Add `github.com/stretchr/testify` for test assertions (`go get github.com/stretchr/testify`).
+- [x] Set up a `Makefile` with targets: `build`, `test`, `test-integration`, `lint`, `clean`.
+- [x] Install `golangci-lint` and add a `.golangci.yml` config with at minimum: `errcheck`, `govet`, `staticcheck`, `exhaustive`.
+- [x] Write a trivial `main.go` that creates an `mcp-go` server, registers one no-op tool (`ping`), and serves over stdio. Confirm a client (MCP Inspector or `mcp-client` CLI) can connect and list tools.
+- [x] Add a `.gitignore` (the `tmux-harness` binary, any `*.worktree` dirs, `config.json` if local).
 
 ---
 
