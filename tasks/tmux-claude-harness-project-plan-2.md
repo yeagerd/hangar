@@ -102,7 +102,7 @@ All packages under `internal/` are unexported to external consumers — the bina
 
 ### Checklist
 
-- [ ] Define a `Config` struct in `internal/config/config.go` with the following fields:
+- [x] Define a `Config` struct in `internal/config/config.go` with the following fields:
   - `RepoPath string` — absolute path to the git repo being managed
   - `WorktreeRoot string` — directory where worktrees are created (default: `<RepoPath>/../worktrees`)
   - `StorePath string` — path to the JSON workspace registry (default: `~/.config/tmux-harness/workspaces.json`)
@@ -110,15 +110,15 @@ All packages under `internal/` are unexported to external consumers — the bina
   - `IdleThresholdMs int` — milliseconds of terminal inactivity before a session is "idle" (default: `5000`)
   - `SessionPrefix string` — prefix for tmux session names (default: `harness-`)
   - `MaxWorkspaces int` — hard cap on active workspaces (default: `10`)
-- [ ] Implement `Load(configPath string) (*Config, error)` that reads a JSON file at `configPath` (if present) and then overrides each field with environment variables (`HARNESS_REPO_PATH`, `HARNESS_WORKTREE_ROOT`, etc.). Env vars take priority over file values.
-- [ ] Implement `Validate(cfg *Config) error` that checks:
+- [x] Implement `Load(configPath string) (*Config, error)` that reads a JSON file at `configPath` (if present) and then overrides each field with environment variables (`HARNESS_REPO_PATH`, `HARNESS_WORKTREE_ROOT`, etc.). Env vars take priority over file values.
+- [x] Implement `Validate(cfg *Config) error` that checks:
   - `RepoPath` exists on disk
   - `RepoPath` contains a `.git` directory or file
   - `WorktreeRoot` parent exists (create the directory itself if absent)
   - `StorePath` parent directory exists (create if absent)
   - `MaxWorkspaces` is between 1 and 50
-- [ ] On startup, print a summary of resolved config values to `stderr` (never `stdout` — stdout is the MCP transport stream). Mark any values that are defaults.
-- [ ] Write unit tests for `Load` and `Validate` covering: missing file (uses defaults), env var overrides, invalid `RepoPath`, missing `.git`.
+- [x] On startup, print a summary of resolved config values to `stderr` (never `stdout` — stdout is the MCP transport stream). Mark any values that are defaults.
+- [x] Write unit tests for `Load` and `Validate` covering: missing file (uses defaults), env var overrides, invalid `RepoPath`, missing `.git`.
 
 ---
 
