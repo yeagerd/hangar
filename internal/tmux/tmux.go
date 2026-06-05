@@ -88,18 +88,25 @@ func (c *Client) KillSession(sessionName string) error {
 	return nil
 }
 
-// SendKeys sends text to the named session. If pressEnter is true, an Enter keystroke is appended.
+// SendKeys sends text to the named session. If pressEnter is true, an Enter keystroke is sent
+// as a separate tmux send-keys call after the text, so that pasted multi-line input is
+// submitted rather than left buffered in the terminal's paste queue.
 func (c *Client) SendKeys(sessionName, text string, pressEnter bool) error {
-	args := []string{"send-keys", "-t", sessionName, text}
-	if pressEnter {
-		args = append(args, "Enter")
-	}
-	out, err := c.exec.Run("tmux", args...)
+	out, err := c.exec.Run("tmux", "send-keys", "-t", sessionName, text)
 	if err != nil {
 		if isSessionNotFound(out, err) {
 			return fmt.Errorf("%w: %s", ErrSessionNotFound, sessionName)
 		}
 		return fmt.Errorf("tmux send-keys %q: %w (output: %s)", sessionName, err, out)
+	}
+	if pressEnter {
+		out, err = c.exec.Run("tmux", "send-keys", "-t", sessionName, "", "Enter")
+		if err != nil {
+			if isSessionNotFound(out, err) {
+				return fmt.Errorf("%w: %s", ErrSessionNotFound, sessionName)
+			}
+			return fmt.Errorf("tmux send-keys Enter %q: %w (output: %s)", sessionName, err, out)
+		}
 	}
 	return nil
 }

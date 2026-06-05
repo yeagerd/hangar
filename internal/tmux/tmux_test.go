@@ -9,11 +9,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockExecutor records the last call and returns a preset response.
+// mockExecutor records all calls and returns a preset response.
 type mockExecutor struct {
-	out []byte
-	err error
-	// For verifying the invocation.
+	out  []byte
+	err  error
+	calls [][]string // each element is [name, arg0, arg1, ...]
+	// Convenience accessors for the last call.
 	lastCmd  string
 	lastArgs []string
 }
@@ -21,6 +22,10 @@ type mockExecutor struct {
 func (m *mockExecutor) Run(name string, args ...string) ([]byte, error) {
 	m.lastCmd = name
 	m.lastArgs = args
+	entry := make([]string, 0, 1+len(args))
+	entry = append(entry, name)
+	entry = append(entry, args...)
+	m.calls = append(m.calls, entry)
 	return m.out, m.err
 }
 
@@ -131,7 +136,10 @@ func TestSendKeys_Happy(t *testing.T) {
 	c := NewWithExecutor(m)
 	err := c.SendKeys("harness-test", "hello", true)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"send-keys", "-t", "harness-test", "hello", "Enter"}, m.lastArgs)
+	// Text sent in first call, Enter sent separately in second call.
+	require.Len(t, m.calls, 2)
+	assert.Equal(t, []string{"tmux", "send-keys", "-t", "harness-test", "hello"}, m.calls[0])
+	assert.Equal(t, []string{"tmux", "send-keys", "-t", "harness-test", "", "Enter"}, m.calls[1])
 }
 
 func TestSendKeys_NoEnter(t *testing.T) {
@@ -139,7 +147,8 @@ func TestSendKeys_NoEnter(t *testing.T) {
 	c := NewWithExecutor(m)
 	err := c.SendKeys("harness-test", "hello", false)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"send-keys", "-t", "harness-test", "hello"}, m.lastArgs)
+	require.Len(t, m.calls, 1)
+	assert.Equal(t, []string{"tmux", "send-keys", "-t", "harness-test", "hello"}, m.calls[0])
 }
 
 func TestSendKeys_SessionNotFound(t *testing.T) {
