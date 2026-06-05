@@ -95,7 +95,7 @@ Each subcommand follows the same pattern:
 
 ### 3e — `send`
 
-- [ ] Implement `client/cmd_send.go`: subcommand `send <id> <text>`.
+- [x] Implement `client/cmd_send.go`: subcommand `send <id> <text>`.
   - Positional args: `id` (required), `text` (required; join remaining args as a
     single space-separated string so quoting is optional for simple prompts).
   - Flag: `--enter` (bool, default true). `--no-enter` sets it false.
