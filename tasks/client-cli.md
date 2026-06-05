@@ -30,7 +30,7 @@ Module path: `github.com/articulant/tmux-harness/client`
 
 ## Phase 2 — MCP Client Transport
 
-- [ ] Implement `client/connect.go`: function
+- [x] Implement `client/connect.go`: function
   `connect(ctx context.Context, binary, configPath string) (*mcpclient.Client, func(), error)`
   that:
   - Resolves `binary` (default: `bin/tmux-harness` relative to the executable, then
@@ -42,11 +42,11 @@ Module path: `github.com/articulant/tmux-harness/client`
   - Returns the connected client and a `cleanup` func that kills the subprocess and
     waits for it to exit.
   - Forwards the subprocess's `stderr` to the client process's `stderr`.
-- [ ] Implement `client/call.go`: helper
+- [x] Implement `client/call.go`: helper
   `callTool(ctx context.Context, c *mcpclient.Client, name string, args map[string]any) (json.RawMessage, error)`
   that calls `c.CallTool`, extracts the text content from the result, and returns the
   raw JSON bytes. Return a descriptive error when the MCP response contains an error.
-- [ ] Confirm `go build ./client/...` and `go vet ./client/...` are clean.
+- [x] Confirm `go build ./client/...` and `go vet ./client/...` are clean.
 
 ---
 
