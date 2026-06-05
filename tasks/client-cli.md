@@ -86,7 +86,7 @@ Each subcommand follows the same pattern:
 
 ### 3d — `delete`
 
-- [ ] Implement `client/cmd_delete.go`: subcommand `delete <id>`.
+- [x] Implement `client/cmd_delete.go`: subcommand `delete <id>`.
   - Positional arg: `id` (required).
   - Flag: `--confirm` (bool, default false). If false, print a warning and exit 1
     without calling the server.
