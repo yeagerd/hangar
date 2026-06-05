@@ -289,8 +289,8 @@ Do not attempt to parse Claude Code's internal state. Instead: capture the tmux 
 
 ### Checklist
 
-- [ ] Write `internal/idle/idle.go`.
-- [ ] Define `IdleStatus`:
+- [x] Write `internal/idle/idle.go`.
+- [x] Define `IdleStatus`:
   ```go
   type IdleStatus struct {
       Idle          bool
@@ -299,13 +299,13 @@ Do not attempt to parse Claude Code's internal state. Instead: capture the tmux 
       ThresholdMs   int64
   }
   ```
-- [ ] Implement `Check(ctx context.Context, ws store.Workspace, tmuxClient *tmux.Client, store *store.Store, thresholdMs int64) (IdleStatus, error)`:
+- [x] Implement `Check(ctx context.Context, ws store.Workspace, tmuxClient *tmux.Client, store *store.Store, thresholdMs int64) (IdleStatus, error)`:
   1. Call `tmuxClient.CapturePane(ws.TmuxSession, 200)`.
   2. Hash the result with `crypto/sha256` (convert to hex string).
   3. If hash differs from `ws.LastCaptureHash`, call `store.Update` to record the new hash and set `LastChangedAt = time.Now()`. Return `IdleStatus{Idle: false, ...}`.
   4. If hash is the same, compute `elapsedMs = time.Since(ws.LastChangedAt).Milliseconds()`. If `elapsedMs >= thresholdMs`, return `IdleStatus{Idle: true, ...}`. Otherwise return `IdleStatus{Idle: false, ...}`.
-- [ ] Optionally (behind a config flag `EnablePromptHeuristic bool`): after determining the hash state, also check whether the last non-empty line of the captured pane ends with the Claude Code prompt string (a configurable string, default `"> "`). If it does, treat this as additional evidence of idleness but not a definitive signal — only use it as a tiebreaker when `elapsedMs` is between 80% and 100% of `thresholdMs`.
-- [ ] Write unit tests for `Check` by passing a mock tmux client. Test: first call (hash is empty → always busy), hash changes → busy, hash stable below threshold → busy, hash stable above threshold → idle.
+- [x] Optionally (behind a config flag `EnablePromptHeuristic bool`): after determining the hash state, also check whether the last non-empty line of the captured pane ends with the Claude Code prompt string (a configurable string, default `"> "`). If it does, treat this as additional evidence of idleness but not a definitive signal — only use it as a tiebreaker when `elapsedMs` is between 80% and 100% of `thresholdMs`.
+- [x] Write unit tests for `Check` by passing a mock tmux client. Test: first call (hash is empty → always busy), hash changes → busy, hash stable below threshold → busy, hash stable above threshold → idle.
 
 ---
 
