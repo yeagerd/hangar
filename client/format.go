@@ -37,7 +37,7 @@ const (
 	colNameWidth   = 16
 	colStatusWidth = 8
 	colBranchWidth = 16
-	colRepoWidth   = 6
+	colRepoWidth   = 8
 )
 
 // truncate shortens s to maxLen, appending "…" if truncated.

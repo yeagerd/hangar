@@ -181,15 +181,15 @@ Each subcommand follows the same pattern:
 
 ## Phase 6 — Tests
 
-- [ ] `client/format_test.go`: unit tests for `printTable` and `printWorkspace`.
+- [x] `client/format_test.go`: unit tests for `printTable` and `printWorkspace`.
   Use `bytes.Buffer` as the writer. Cover: empty list, single entry, long-name
   truncation, archived workspace row.
-- [ ] `client/connect_test.go`: test that `connect` returns an error when the binary
+- [x] `client/connect_test.go`: test that `connect` returns an error when the binary
   path does not exist (no real subprocess needed).
-- [ ] `client/call_test.go`: test `callTool` error extraction — use a mock client or
+- [x] `client/call_test.go`: test `callTool` error extraction — use a mock client or
   stub that returns a pre-built MCP error response; confirm the returned `error` is
   non-nil and contains the server's message.
-- [ ] Run `go test -race ./client/...` — all tests must pass.
+- [x] Run `go test -race ./client/...` — all tests must pass.
 
 ---
 
