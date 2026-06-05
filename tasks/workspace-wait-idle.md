@@ -73,7 +73,7 @@ Default timeout: **10 minutes** (600 000 ms). Client may override via
 
 ## 3. Smoke test
 
-- [ ] In `cmd/smoke/main.go`, add a `workspace_wait_idle` call after `workspace_send` (if the smoke test exercises a send). Pass `timeout_ms: 30000` so the smoke test doesn't hang. Log whether the result was idle or timed out. Do **not** fail the smoke test on timeout — just log it.
+- [x] In `cmd/smoke/main.go`, add a `workspace_wait_idle` call after `workspace_send` (if the smoke test exercises a send). Pass `timeout_ms: 30000` so the smoke test doesn't hang. Log whether the result was idle or timed out. Do **not** fail the smoke test on timeout — just log it.
 
 ---
 

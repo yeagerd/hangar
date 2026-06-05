@@ -152,7 +152,7 @@ func main() {
 	expectedTools := []string{
 		"workspace_list", "workspace_create", "workspace_archive",
 		"workspace_delete", "workspace_send", "workspace_read",
-		"workspace_idle", "workspace_attach_hint",
+		"workspace_idle", "workspace_wait_idle", "workspace_attach_hint",
 	}
 	registeredNames := make(map[string]bool)
 	for _, t := range toolList {
@@ -233,6 +233,18 @@ func main() {
 	// workspace_idle
 	logf("workspace_idle")
 	mustCallTool(rpc, "workspace_idle", map[string]any{"id": wsID})
+
+	// workspace_wait_idle — 30 s timeout so the smoke test doesn't hang.
+	logf("workspace_wait_idle (timeout_ms=30000)")
+	waitResult := mustCallTool(rpc, "workspace_wait_idle", map[string]any{
+		"id":         wsID,
+		"timeout_ms": 30_000,
+	})
+	if waitContent, _ := waitResult["content"].([]any); len(waitContent) > 0 {
+		if wc, _ := waitContent[0].(map[string]any); wc != nil {
+			logf("workspace_wait_idle result: %v ✓", wc["text"])
+		}
+	}
 
 	// workspace_attach_hint
 	logf("workspace_attach_hint")
