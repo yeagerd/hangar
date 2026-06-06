@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 // Config holds all runtime configuration for hangar.
@@ -62,7 +64,14 @@ func Load(configPath string) (*Config, error) {
 	applyEnvString("HARNESS_SESSION_PREFIX", &cfg.SessionPrefix)
 	applyEnvInt("HARNESS_MAX_WORKSPACES", &cfg.MaxWorkspaces)
 
-	// Re-apply defaults that depend on RepoPath after env vars.
+	// Auto-detect repoPath from git if not set by config or env.
+	if cfg.RepoPath == "" {
+		if detected, err := detectRepoPath(); err == nil {
+			cfg.RepoPath = detected
+		}
+	}
+
+	// Re-apply defaults that depend on RepoPath after env vars and auto-detection.
 	if cfg.WorktreeRoot == "" && cfg.RepoPath != "" {
 		cfg.WorktreeRoot = filepath.Join(filepath.Dir(cfg.RepoPath), "worktrees")
 	}
@@ -84,7 +93,7 @@ func Load(configPath string) (*Config, error) {
 // Validate checks that cfg is internally consistent and the filesystem prerequisites exist.
 func Validate(cfg *Config) error {
 	if cfg.RepoPath == "" {
-		return fmt.Errorf("repoPath is required")
+		return fmt.Errorf("repoPath is not set and could not be auto-detected; set HARNESS_REPO_PATH or run from within a git repository")
 	}
 	if _, err := os.Stat(cfg.RepoPath); os.IsNotExist(err) {
 		return fmt.Errorf("repoPath %q does not exist", cfg.RepoPath)
@@ -156,4 +165,12 @@ func applyEnvInt(key string, dst *int) {
 			*dst = n
 		}
 	}
+}
+
+func detectRepoPath() (string, error) {
+	out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
 }

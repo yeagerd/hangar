@@ -152,5 +152,17 @@ func TestValidate_EmptyRepoPath(t *testing.T) {
 	cfg := &Config{MaxWorkspaces: 10}
 	err := Validate(cfg)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "repoPath is required")
+	assert.Contains(t, err.Error(), "repoPath is not set")
+}
+
+func TestLoad_AutoDetectRepoPath(t *testing.T) {
+	// Unset override so auto-detection runs.
+	t.Setenv("HARNESS_REPO_PATH", "")
+
+	cfg, err := Load("")
+	require.NoError(t, err)
+	// When run from within the repo, git detects a non-empty path.
+	assert.NotEmpty(t, cfg.RepoPath)
+	// StorePath should be local to the detected repo.
+	assert.Contains(t, cfg.StorePath, ".hangar")
 }
