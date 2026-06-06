@@ -52,15 +52,12 @@ func run(configPath string) error {
 		return fmt.Errorf("initializing store: %w", err)
 	}
 
-	// Step 3: Initialize tmux and per-repo worktree clients.
+	// Step 3: Initialize tmux and worktree clients.
 	tmuxClient := tmux.New()
-	wtClients := make(map[string]*worktree.Client, len(cfg.Repos))
-	for alias, repo := range cfg.Repos {
-		wtClients[alias] = worktree.New(repo.Path)
-	}
+	wtClient := worktree.New(cfg.RepoPath)
 
 	// Step 4: Initialize workspace manager.
-	mgr := workspace.New(tmuxClient, wtClients, s, cfg)
+	mgr := workspace.New(tmuxClient, wtClient, s, cfg)
 
 	// Step 5: Reconcile — detect orphaned workspaces. Log results to stderr.
 	ctx, cancel := context.WithCancel(context.Background())

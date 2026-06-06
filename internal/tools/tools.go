@@ -25,7 +25,7 @@ type Manager interface {
 	Create(ctx context.Context, opts workspace.CreateOptions) (store.Workspace, error)
 	Archive(ctx context.Context, id string) (store.Workspace, error)
 	Delete(ctx context.Context, id string, confirmed bool) error
-	List(includeArchived bool, repoAlias string) []store.Workspace
+	List(includeArchived bool) []store.Workspace
 	Get(id string) (store.Workspace, error)
 	GetByName(name string) (store.Workspace, error)
 	SendKeys(id string, text string, pressEnter bool) error
@@ -76,8 +76,6 @@ type workspaceSummary struct {
 	TmuxSession  string                `json:"tmuxSession"`
 	CreatedAt    time.Time             `json:"createdAt"`
 	WorktreePath string                `json:"worktreePath"`
-	RepoAlias    string                `json:"repoAlias,omitempty"`
-	RepoPath     string                `json:"repoPath,omitempty"`
 }
 
 func toSummary(ws store.Workspace) workspaceSummary {
@@ -89,8 +87,6 @@ func toSummary(ws store.Workspace) workspaceSummary {
 		TmuxSession:  ws.TmuxSession,
 		CreatedAt:    ws.CreatedAt,
 		WorktreePath: ws.WorktreePath,
-		RepoAlias:    ws.RepoAlias,
-		RepoPath:     ws.RepoPath,
 	}
 }
 
@@ -151,13 +147,9 @@ func Register(s *server.MCPServer, mgr Manager, capture PaneCapture, storeUpd St
 		mcp.WithBoolean("include_archived",
 			mcp.Description("Include archived and orphaned workspaces"),
 		),
-		mcp.WithString("repo",
-			mcp.Description("Filter by repo alias (omit to list workspaces for all repos)"),
-		),
 	), func(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		includeArchived := req.GetBool("include_archived", false)
-		repoAlias := req.GetString("repo", "")
-		workspaces := mgr.List(includeArchived, repoAlias)
+		workspaces := mgr.List(includeArchived)
 		summaries := make([]workspaceSummary, len(workspaces))
 		for i, ws := range workspaces {
 			summaries[i] = toSummary(ws)
@@ -175,9 +167,6 @@ func Register(s *server.MCPServer, mgr Manager, capture PaneCapture, storeUpd St
 		mcp.WithString("branch",
 			mcp.Description("Git branch to create or check out (defaults to name)"),
 		),
-		mcp.WithString("repo",
-			mcp.Description(`Alias of the repo to create the workspace in (defaults to "default" if only one repo is configured)`),
-		),
 		mcp.WithObject("meta",
 			mcp.Description("Freeform string key-value metadata"),
 		),
@@ -187,7 +176,6 @@ func Register(s *server.MCPServer, mgr Manager, capture PaneCapture, storeUpd St
 			return mcp.NewToolResultError("name is required"), nil
 		}
 		branch := req.GetString("branch", "")
-		repoAlias := req.GetString("repo", "")
 
 		var meta map[string]string
 		if raw, ok := req.GetArguments()["meta"]; ok && raw != nil {
@@ -199,7 +187,7 @@ func Register(s *server.MCPServer, mgr Manager, capture PaneCapture, storeUpd St
 			}
 		}
 
-		ws, err := mgr.Create(ctx, workspace.CreateOptions{Name: name, Branch: branch, Repo: repoAlias, Meta: meta})
+		ws, err := mgr.Create(ctx, workspace.CreateOptions{Name: name, Branch: branch, Meta: meta})
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
