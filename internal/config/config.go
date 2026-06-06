@@ -17,9 +17,7 @@ type Repo struct {
 
 // Config holds all runtime configuration for tmux-harness.
 type Config struct {
-	// Deprecated: use Repos
-	RepoPath string `json:"repoPath"`
-	// Deprecated: use Repos
+	RepoPath     string `json:"repoPath"`
 	WorktreeRoot string `json:"worktreeRoot"`
 
 	Repos           map[string]Repo `json:"repos"`
