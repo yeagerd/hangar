@@ -9,10 +9,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/articulant/tmux-harness/internal/config"
-	"github.com/articulant/tmux-harness/internal/store"
-	"github.com/articulant/tmux-harness/internal/tmux"
-	"github.com/articulant/tmux-harness/internal/worktree"
+	"github.com/yeagerd/hangar/internal/config"
+	"github.com/yeagerd/hangar/internal/store"
+	"github.com/yeagerd/hangar/internal/tmux"
+	"github.com/yeagerd/hangar/internal/worktree"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

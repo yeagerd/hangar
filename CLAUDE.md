@@ -1,4 +1,4 @@
-# CLAUDE.md — tmux-harness MCP Server
+# CLAUDE.md — hangar MCP Server
 
 ## Project Overview
 

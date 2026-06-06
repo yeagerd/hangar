@@ -11,10 +11,10 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/articulant/tmux-harness/internal/config"
-	"github.com/articulant/tmux-harness/internal/store"
-	"github.com/articulant/tmux-harness/internal/tmux"
-	"github.com/articulant/tmux-harness/internal/worktree"
+	"github.com/yeagerd/hangar/internal/config"
+	"github.com/yeagerd/hangar/internal/store"
+	"github.com/yeagerd/hangar/internal/tmux"
+	"github.com/yeagerd/hangar/internal/worktree"
 )
 
 var validName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$|^[a-z0-9]$`)

@@ -17,8 +17,8 @@ func Execute(args []string) error {
 	var jsonOut bool
 	var showVersion bool
 
-	fs.StringVar(&configPath, "config", "", "path to config JSON file passed to tmux-harness")
-	fs.StringVar(&binaryPath, "binary", "", "path to tmux-harness binary (default: bin/tmux-harness)")
+	fs.StringVar(&configPath, "config", "", "path to config JSON file passed to hangar")
+	fs.StringVar(&binaryPath, "binary", "", "path to hangar binary (default: bin/hangar)")
 	fs.BoolVar(&jsonOut, "json", false, "emit raw JSON output instead of human-readable text")
 	fs.BoolVar(&showVersion, "version", false, "print version and exit")
 
@@ -117,8 +117,8 @@ Subcommands:
   attach-hint   Print the tmux attach command for a workspace
 
 Flags:
-  --config <path>   Path to config JSON file passed to tmux-harness
-  --binary <path>   Path to tmux-harness binary (default: bin/tmux-harness)
+  --config <path>   Path to config JSON file passed to hangar
+  --binary <path>   Path to hangar binary (default: bin/hangar)
   --json            Emit raw JSON output instead of human-readable text
   --version         Print version and exit
 `)

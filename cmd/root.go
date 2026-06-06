@@ -9,12 +9,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/articulant/tmux-harness/internal/config"
-	"github.com/articulant/tmux-harness/internal/store"
-	"github.com/articulant/tmux-harness/internal/tmux"
-	"github.com/articulant/tmux-harness/internal/tools"
-	"github.com/articulant/tmux-harness/internal/workspace"
-	"github.com/articulant/tmux-harness/internal/worktree"
+	"github.com/yeagerd/hangar/internal/config"
+	"github.com/yeagerd/hangar/internal/store"
+	"github.com/yeagerd/hangar/internal/tmux"
+	"github.com/yeagerd/hangar/internal/tools"
+	"github.com/yeagerd/hangar/internal/workspace"
+	"github.com/yeagerd/hangar/internal/worktree"
 	"github.com/mark3labs/mcp-go/server"
 )
 
@@ -28,7 +28,7 @@ func Execute() error {
 	flag.Parse()
 
 	if showVersion {
-		fmt.Fprintf(os.Stderr, "tmux-harness %s\n", version)
+		fmt.Fprintf(os.Stderr, "hangar %s\n", version)
 		return nil
 	}
 
@@ -68,7 +68,7 @@ func run(configPath string) error {
 
 	// Step 6: Build MCP server and register all tools.
 	mcpServer := server.NewMCPServer(
-		"tmux-harness",
+		"hangar",
 		version,
 		server.WithToolCapabilities(true),
 		server.WithResourceCapabilities(true, false),
@@ -82,14 +82,14 @@ func run(configPath string) error {
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		sig := <-sigCh
-		fmt.Fprintf(os.Stderr, "tmux-harness: received %s; waiting up to 5 s for in-flight calls...\n", sig)
+		fmt.Fprintf(os.Stderr, "hangar: received %s; waiting up to 5 s for in-flight calls...\n", sig)
 		cancel()
 		time.Sleep(5 * time.Second)
-		fmt.Fprintln(os.Stderr, "tmux-harness: exiting")
+		fmt.Fprintln(os.Stderr, "hangar: exiting")
 		os.Exit(0)
 	}()
 
 	// Step 7: Start MCP server — stdout is the MCP transport from this point forward.
-	fmt.Fprintln(os.Stderr, "tmux-harness: starting MCP server over stdio")
+	fmt.Fprintln(os.Stderr, "hangar: starting MCP server over stdio")
 	return server.ServeStdio(mcpServer)
 }

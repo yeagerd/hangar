@@ -1,4 +1,4 @@
-# tmux-harness
+# hangar
 
 A Go MCP server that lets orchestrators (Claude Code, Hermes, cabinet) create and manage isolated Claude Code sessions. Each "workspace" is a git worktree in a dedicated directory, opened inside a named tmux session with a running Claude Code interactive shell.
 
@@ -18,9 +18,9 @@ A Go MCP server that lets orchestrators (Claude Code, Hermes, cabinet) create an
 ## Build
 
 ```sh
-make build           # produces ./tmux-harness
+make build           # produces ./hangar
 # or
-go build -o tmux-harness .
+go build -o hangar .
 ```
 
 ---
@@ -33,7 +33,7 @@ Configuration can be supplied via a JSON file and/or environment variables. Envi
 |-------|---------|---------|-------------|
 | `repoPath` | `HARNESS_REPO_PATH` | *(required)* | Absolute path to the git repository being managed |
 | `worktreeRoot` | `HARNESS_WORKTREE_ROOT` | `<repoPath>/../worktrees` | Directory where worktrees are created |
-| `storePath` | `HARNESS_STORE_PATH` | `~/.config/tmux-harness/workspaces.json` | Path to the JSON workspace registry |
+| `storePath` | `HARNESS_STORE_PATH` | `~/.config/hangar/workspaces.json` | Path to the JSON workspace registry |
 | `claudeCmd` | `HARNESS_CLAUDE_CMD` | `claude` | Command to launch Claude Code |
 | `idleThresholdMs` | `HARNESS_IDLE_THRESHOLD_MS` | `5000` | Milliseconds of pane inactivity before a session is "idle" |
 | `sessionPrefix` | `HARNESS_SESSION_PREFIX` | `harness-` | Prefix for tmux session names |
@@ -58,9 +58,9 @@ Add the server to your Claude Code MCP config (typically `~/.claude/mcp.json` or
 ```json
 {
   "mcpServers": {
-    "tmux-harness": {
-      "command": "/usr/local/bin/tmux-harness",
-      "args": ["--config", "/home/alice/.config/tmux-harness/config.json"],
+    "hangar": {
+      "command": "/usr/local/bin/hangar",
+      "args": ["--config", "/home/alice/.config/hangar/config.json"],
       "env": {
         "HARNESS_REPO_PATH": "/home/alice/myproject"
       }
@@ -81,10 +81,10 @@ Generic stdio MCP entry (adjust `command` and `env` as needed):
 {
   "servers": [
     {
-      "name": "tmux-harness",
+      "name": "hangar",
       "transport": "stdio",
-      "command": "/usr/local/bin/tmux-harness",
-      "args": ["--config", "/home/alice/.config/tmux-harness/config.json"],
+      "command": "/usr/local/bin/hangar",
+      "args": ["--config", "/home/alice/.config/hangar/config.json"],
       "env": {
         "HARNESS_REPO_PATH": "/home/alice/myproject"
       }
@@ -252,11 +252,11 @@ The orchestrator and human can both interact with the session simultaneously.
 ## Two-Claude Setup
 
 ```
-Orchestrator Claude Code (has tmux-harness MCP registered)
+Orchestrator Claude Code (has hangar MCP registered)
         │
         │  workspace_create / workspace_send / workspace_idle / workspace_read / workspace_archive
         ▼
-  tmux-harness binary
+  hangar binary
         │
         ├── git worktrees (one per workspace)
         └── tmux sessions (one per workspace, named harness-<name>)
@@ -278,7 +278,7 @@ Human ──► tmux attach-session -t harness-<name>  (at any time)
 
 ## Startup Reconciliation
 
-On startup, `tmux-harness` reconciles the workspace registry against live tmux sessions:
+On startup, `hangar` reconciles the workspace registry against live tmux sessions:
 
 - **Active workspace, session missing** → status set to `orphaned`, logged to stderr. The branch and registry entry are preserved.
 - **tmux session with harness prefix, not in registry** → warning logged (not auto-deleted; may be manually created).
@@ -302,7 +302,7 @@ Check `HARNESS_CLAUDE_CMD` points to a valid binary. The session is still create
 A previous run left a stale worktree. Run `git worktree prune` in the repo, or use `workspace_delete` to clean up via the MCP interface.
 
 **"store is out of sync"**
-Delete `~/.config/tmux-harness/workspaces.json` and restart. Existing tmux sessions will show as untracked warnings at next startup.
+Delete `~/.config/hangar/workspaces.json` and restart. Existing tmux sessions will show as untracked warnings at next startup.
 
 **"session shows busy indefinitely"**
 Increase `idleThresholdMs`. Or attach to the session manually to check whether Claude Code is actually stuck.

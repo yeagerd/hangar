@@ -15,7 +15,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
-// connect spawns tmux-harness as a subprocess and returns an initialized MCP client.
+// connect spawns hangar as a subprocess and returns an initialized MCP client.
 // cleanup must be called when done to kill the subprocess and release resources.
 func connect(ctx context.Context, opts globalOpts) (*mcpclient.Client, func(), error) {
 	binary, err := resolveBinary(opts.binaryPath)
@@ -53,7 +53,7 @@ func connect(ctx context.Context, opts globalOpts) (*mcpclient.Client, func(), e
 
 	c, err := mcpclient.NewStdioMCPClientWithOptions(binary, nil, args, cmdFunc)
 	if err != nil {
-		return nil, nil, fmt.Errorf("starting tmux-harness: %w", err)
+		return nil, nil, fmt.Errorf("starting hangar: %w", err)
 	}
 
 	// Forward subprocess stderr to our stderr.
@@ -84,8 +84,8 @@ func connect(ctx context.Context, opts globalOpts) (*mcpclient.Client, func(), e
 	return c, cleanup, nil
 }
 
-// resolveBinary finds the tmux-harness binary. Prefers the given path, then
-// bin/tmux-harness relative to the running executable, then $PATH.
+// resolveBinary finds the hangar binary. Prefers the given path, then
+// bin/hangar relative to the running executable, then $PATH.
 func resolveBinary(path string) (string, error) {
 	if path != "" {
 		if _, err := os.Stat(path); err != nil {
@@ -94,10 +94,10 @@ func resolveBinary(path string) (string, error) {
 		return path, nil
 	}
 
-	// Try bin/tmux-harness relative to the running executable.
+	// Try bin/hangar relative to the running executable.
 	exe, err := os.Executable()
 	if err == nil {
-		candidate := filepath.Join(filepath.Dir(exe), "tmux-harness")
+		candidate := filepath.Join(filepath.Dir(exe), "hangar")
 		if runtime.GOOS == "windows" {
 			candidate += ".exe"
 		}
@@ -107,9 +107,9 @@ func resolveBinary(path string) (string, error) {
 	}
 
 	// Fall back to $PATH.
-	found, err := exec.LookPath("tmux-harness")
+	found, err := exec.LookPath("hangar")
 	if err != nil {
-		return "", fmt.Errorf("tmux-harness binary not found in PATH or next to harness-client; use --binary to specify")
+		return "", fmt.Errorf("hangar binary not found in PATH or next to harness-client; use --binary to specify")
 	}
 	return found, nil
 }

@@ -13,7 +13,7 @@ type mcpServerEntry struct {
 }
 
 // findProjectMCPConfig walks up from dir looking for .mcp.json and returns
-// the tmux-harness server entry if found. Returns nil if not found or unparseable.
+// the hangar server entry if found. Returns nil if not found or unparseable.
 func findProjectMCPConfig(dir string) *mcpServerEntry {
 	for {
 		data, err := os.ReadFile(filepath.Join(dir, ".mcp.json"))
@@ -22,7 +22,7 @@ func findProjectMCPConfig(dir string) *mcpServerEntry {
 				MCPServers map[string]mcpServerEntry `json:"mcpServers"`
 			}
 			if err := json.Unmarshal(data, &cfg); err == nil {
-				if entry, ok := cfg.MCPServers["tmux-harness"]; ok {
+				if entry, ok := cfg.MCPServers["hangar"]; ok {
 					return &entry
 				}
 			}

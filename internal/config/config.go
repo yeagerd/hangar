@@ -8,7 +8,7 @@ import (
 	"strconv"
 )
 
-// Config holds all runtime configuration for tmux-harness.
+// Config holds all runtime configuration for hangar.
 type Config struct {
 	RepoPath        string `json:"repoPath"`
 	WorktreeRoot    string `json:"worktreeRoot"`
@@ -57,7 +57,7 @@ func Load(configPath string) (*Config, error) {
 		if err != nil {
 			home = "."
 		}
-		cfg.StorePath = filepath.Join(home, ".config", "tmux-harness", "workspaces.json")
+		cfg.StorePath = filepath.Join(home, ".config", "hangar", "workspaces.json")
 	}
 
 	// Environment variable overrides.
@@ -122,7 +122,7 @@ func Validate(cfg *Config) error {
 
 // PrintSummary logs resolved config values to stderr, marking defaults.
 func PrintSummary(cfg *Config) {
-	fmt.Fprintln(os.Stderr, "tmux-harness config:")
+	fmt.Fprintln(os.Stderr, "hangar config:")
 	printField("  repoPath", cfg.RepoPath, "")
 	printField("  worktreeRoot", cfg.WorktreeRoot, "")
 	printField("  storePath", cfg.StorePath, "")

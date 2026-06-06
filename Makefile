@@ -1,6 +1,6 @@
 .PHONY: build test test-integration lint clean
 
-BINARY := tmux-harness
+BINARY := hangar
 
 build:
 	go build -o bin/$(BINARY) .

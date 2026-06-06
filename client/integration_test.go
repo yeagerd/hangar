@@ -26,18 +26,18 @@ func TestIntegration_ListEmptyStore(t *testing.T) {
 	repoRoot := filepath.Dir(filepath.Dir(file))
 
 	tmpDir := t.TempDir()
-	harnessBin := filepath.Join(tmpDir, "tmux-harness")
+	harnessBin := filepath.Join(tmpDir, "hangar")
 	clientBin := filepath.Join(tmpDir, "harness-client")
 	if runtime.GOOS == "windows" {
 		harnessBin += ".exe"
 		clientBin += ".exe"
 	}
 
-	// Build tmux-harness.
+	// Build hangar.
 	buildCmd := exec.Command("go", "build", "-o", harnessBin, ".")
 	buildCmd.Dir = repoRoot
 	out, err := buildCmd.CombinedOutput()
-	require.NoError(t, err, "building tmux-harness: %s", out)
+	require.NoError(t, err, "building hangar: %s", out)
 
 	// Build harness-client.
 	buildCmd = exec.Command("go", "build", "-o", clientBin, "./client")

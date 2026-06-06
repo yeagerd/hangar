@@ -11,7 +11,7 @@ import (
 func TestConnect_BinaryNotFound(t *testing.T) {
 	ctx := context.Background()
 	// Use a path that does not exist.
-	c, cleanup, err := connect(ctx, globalOpts{binaryPath: "/nonexistent/path/to/tmux-harness"})
+	c, cleanup, err := connect(ctx, globalOpts{binaryPath: "/nonexistent/path/to/hangar"})
 	require.Error(t, err)
 	assert.Nil(t, c)
 	assert.Nil(t, cleanup)
@@ -26,8 +26,8 @@ func TestResolveBinary_ExplicitPath(t *testing.T) {
 }
 
 func TestResolveBinary_EmptyPath_NoExe(t *testing.T) {
-	// With no tmux-harness in PATH or next to the test binary, this should
-	// either succeed (if tmux-harness happens to be available) or fail with
+	// With no hangar in PATH or next to the test binary, this should
+	// either succeed (if hangar happens to be available) or fail with
 	// a descriptive error. We only verify no panic occurs.
 	_, _ = resolveBinary("")
 }

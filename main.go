@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/articulant/tmux-harness/cmd"
+	"github.com/yeagerd/hangar/cmd"
 )
 
 func main() {
 	if err := cmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "tmux-harness:", err)
+		fmt.Fprintln(os.Stderr, "hangar:", err)
 		os.Exit(1)
 	}
 }

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/articulant/tmux-harness/internal/store"
+	"github.com/yeagerd/hangar/internal/store"
 )
 
 // IdleStatus is the result of a single idle check.

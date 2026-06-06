@@ -13,9 +13,9 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/articulant/tmux-harness/internal/idle"
-	"github.com/articulant/tmux-harness/internal/store"
-	"github.com/articulant/tmux-harness/internal/workspace"
+	"github.com/yeagerd/hangar/internal/idle"
+	"github.com/yeagerd/hangar/internal/store"
+	"github.com/yeagerd/hangar/internal/workspace"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )

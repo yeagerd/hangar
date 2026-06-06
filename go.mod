@@ -1,4 +1,4 @@
-module github.com/articulant/tmux-harness
+module github.com/yeagerd/hangar
 
 go 1.26.4
 

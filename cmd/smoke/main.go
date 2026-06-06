@@ -1,7 +1,7 @@
 // Command smoke is a standalone smoke-test that starts the harness binary and exercises
 // every tool over stdio. Run it manually or in CI after building the binary:
 //
-//	go build -o tmux-harness . && go run ./cmd/smoke --binary ./tmux-harness --repo /path/to/repo
+//	go build -o hangar . && go run ./cmd/smoke --binary ./hangar --repo /path/to/repo
 //
 // The test exits non-zero on any failure and cleans up created workspaces.
 package main
@@ -20,7 +20,7 @@ import (
 )
 
 var (
-	binaryPath = flag.String("binary", "./tmux-harness", "path to the tmux-harness binary")
+	binaryPath = flag.String("binary", "./hangar", "path to the hangar binary")
 	repoPath   = flag.String("repo", "", "git repo path for the harness (required)")
 	configPath = flag.String("config", "", "optional config file path")
 )
@@ -92,7 +92,7 @@ func main() {
 	flag.Parse()
 
 	if *repoPath == "" {
-		fmt.Fprintln(os.Stderr, "usage: smoke --binary ./tmux-harness --repo /path/to/repo")
+		fmt.Fprintln(os.Stderr, "usage: smoke --binary ./hangar --repo /path/to/repo")
 		os.Exit(1)
 	}
 

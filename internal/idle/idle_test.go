@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/articulant/tmux-harness/internal/store"
+	"github.com/yeagerd/hangar/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

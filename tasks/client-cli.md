@@ -1,13 +1,13 @@
 # Task List: `harness-client` CLI
 
 A human-facing command-line client that wraps every MCP tool exposed by the
-tmux-harness server. The client spawns `bin/tmux-harness` as a subprocess,
+hangar server. The client spawns `bin/hangar` as a subprocess,
 connects to it over the stdio MCP transport using `mcp-go`'s client package,
 and maps each subcommand to the corresponding `workspace_*` MCP tool call.
 
 Binary: `bin/harness-client`  
 Source: `client/` (repo root)  
-Module path: `github.com/articulant/tmux-harness/client`
+Module path: `github.com/yeagerd/hangar/client`
 
 ---
 
@@ -33,7 +33,7 @@ Module path: `github.com/articulant/tmux-harness/client`
 - [x] Implement `client/connect.go`: function
   `connect(ctx context.Context, binary, configPath string) (*mcpclient.Client, func(), error)`
   that:
-  - Resolves `binary` (default: `bin/tmux-harness` relative to the executable, then
+  - Resolves `binary` (default: `bin/hangar` relative to the executable, then
     `$PATH`).
   - Spawns the binary with `exec.CommandContext`, passing `--config <configPath>` when
     configPath is non-empty.
@@ -197,13 +197,13 @@ Each subcommand follows the same pattern:
 
 - [x] Add an integration test `client/integration_test.go` (build tag `integration`)
   that:
-  - Builds `bin/tmux-harness` and `bin/harness-client` via `exec.Command("go",
+  - Builds `bin/hangar` and `bin/harness-client` via `exec.Command("go",
     "build", ...)`.
   - Calls `harness-client list` against a temp config with an empty store.
   - Asserts exit code 0 and empty (or header-only) output.
 - [x] Run `HARNESS_INTEGRATION=1 go test -race -tags integration ./client/...` — must
   pass.
-- [x] `make build` produces both `bin/tmux-harness` and `bin/harness-client` — confirm
+- [x] `make build` produces both `bin/hangar` and `bin/harness-client` — confirm
   with `ls bin/`.
 
 ---

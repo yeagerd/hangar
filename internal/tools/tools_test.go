@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/articulant/tmux-harness/internal/store"
-	"github.com/articulant/tmux-harness/internal/workspace"
+	"github.com/yeagerd/hangar/internal/store"
+	"github.com/yeagerd/hangar/internal/workspace"
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/stretchr/testify/assert"
