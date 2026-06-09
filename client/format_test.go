@@ -14,21 +14,24 @@ func TestPrintTable_Empty(t *testing.T) {
 	var buf bytes.Buffer
 	printTable(nil, &buf)
 	out := buf.String()
-	// Header should still be printed.
 	assert.Contains(t, out, "ID")
 	assert.Contains(t, out, "NAME")
 	assert.Contains(t, out, "BRANCH")
+	assert.Contains(t, out, "IDLE")
+	assert.NotContains(t, out, "STATUS")
+	assert.NotContains(t, out, "REPO")
 }
 
 func TestPrintTable_SingleEntry(t *testing.T) {
 	var buf bytes.Buffer
+	isIdle := true
 	ws := []workspaceSummary{
 		{
-			ID:        "8e9691bc-0c72-4942-aba1-b301fef763e4",
-			Name:      "my-workspace",
-			Branch:    "feature-branch",
-			RepoAlias: "default",
-			CreatedAt: time.Date(2026, 6, 5, 13, 41, 0, 0, time.UTC),
+			ID:         "8e9691bc-0c72-4942-aba1-b301fef763e4",
+			Name:       "my-workspace",
+			Branch:     "feature-branch",
+			IdleStatus: &isIdle,
+			CreatedAt:  time.Date(2026, 6, 5, 13, 41, 0, 0, time.UTC),
 		},
 	}
 	printTable(ws, &buf)
@@ -36,7 +39,7 @@ func TestPrintTable_SingleEntry(t *testing.T) {
 	assert.Contains(t, out, "8e9691bc")
 	assert.Contains(t, out, "my-workspace")
 	assert.Contains(t, out, "feature-branch")
-	assert.Contains(t, out, "default")
+	assert.Contains(t, out, "yes")
 }
 
 func TestPrintTable_LongNameTruncation(t *testing.T) {
@@ -49,10 +52,38 @@ func TestPrintTable_LongNameTruncation(t *testing.T) {
 	}
 	printTable(ws, &buf)
 	out := buf.String()
-	// The name column should be truncated with "…".
 	assert.Contains(t, out, "…")
-	// Full name should NOT appear.
 	assert.NotContains(t, out, "this-is-a-very-long-workspace-name-that-exceeds-the-column-width")
+}
+
+func TestPrintTable_ArchivedWorkspace(t *testing.T) {
+	var buf bytes.Buffer
+	ws := []workspaceSummary{
+		{
+			ID:   "deadbeef-0000-0000-0000-000000000000",
+			Name: "old-workspace",
+		},
+	}
+	printTable(ws, &buf)
+	out := buf.String()
+	// Status is not shown in the table; the entry should still be listed by name.
+	assert.Contains(t, out, "old-workspace")
+}
+
+func TestPrintTable_IdleColumn(t *testing.T) {
+	var buf bytes.Buffer
+	yes := true
+	no := false
+	ws := []workspaceSummary{
+		{ID: "aaaa", Name: "idle-ws", IdleStatus: &yes},
+		{ID: "bbbb", Name: "busy-ws", IdleStatus: &no},
+		{ID: "cccc", Name: "unknown-ws"},
+	}
+	printTable(ws, &buf)
+	out := buf.String()
+	assert.Contains(t, out, "yes")
+	assert.Contains(t, out, "no")
+	assert.Contains(t, out, "-")
 }
 
 func TestPrintWorkspace(t *testing.T) {
@@ -87,15 +118,15 @@ func TestTruncate(t *testing.T) {
 	assert.Equal(t, "…", truncate("ab", 1))
 }
 
-func TestPrintTable_NoRepo(t *testing.T) {
+func TestPrintTable_NilIdleShowsDash(t *testing.T) {
 	var buf bytes.Buffer
 	ws := []workspaceSummary{
 		{ID: "aabbccdd", Name: "test"},
 	}
 	printTable(ws, &buf)
 	out := buf.String()
-	// No repo alias → should show "-".
 	lines := strings.Split(out, "\n")
 	require.Greater(t, len(lines), 1)
+	// nil IdleStatus and zero CreatedAt → "-" placeholders in the data row.
 	assert.Contains(t, lines[1], "-")
 }

@@ -15,7 +15,7 @@ type workspaceSummary struct {
 	TmuxSession  string    `json:"tmuxSession"`
 	CreatedAt    time.Time `json:"createdAt"`
 	WorktreePath string    `json:"worktreePath"`
-	RepoAlias    string    `json:"repoAlias,omitempty"`
+	IdleStatus   *bool     `json:"idleStatus,omitempty"`
 }
 
 // errWriter accumulates the first write error and short-circuits subsequent writes.
@@ -34,8 +34,8 @@ func (ew *errWriter) printf(format string, args ...any) {
 const (
 	colIDWidth     = 8
 	colNameWidth   = 16
-	colBranchWidth = 16
-	colRepoWidth   = 8
+	colBranchWidth = 20
+	colIdleWidth   = 5
 )
 
 // truncate shortens s to maxLen, appending "…" if truncated.
@@ -54,13 +54,17 @@ func printTable(ws []workspaceSummary, w io.Writer) {
 		colIDWidth, "ID",
 		colNameWidth, "NAME",
 		colBranchWidth, "BRANCH",
-		colRepoWidth, "REPO",
+		colIdleWidth, "IDLE",
 		"CREATED",
 	)
 	for _, s := range ws {
-		repo := s.RepoAlias
-		if repo == "" {
-			repo = "-"
+		idle := "-"
+		if s.IdleStatus != nil {
+			if *s.IdleStatus {
+				idle = "yes"
+			} else {
+				idle = "no"
+			}
 		}
 		created := "-"
 		if !s.CreatedAt.IsZero() {
@@ -74,7 +78,7 @@ func printTable(ws []workspaceSummary, w io.Writer) {
 			colIDWidth, id,
 			colNameWidth, truncate(s.Name, colNameWidth),
 			colBranchWidth, truncate(s.Branch, colBranchWidth),
-			colRepoWidth, truncate(repo, colRepoWidth),
+			colIdleWidth, idle,
 			created,
 		)
 	}

@@ -10,8 +10,8 @@ import (
 
 func cmdList(opts globalOpts, args []string) error {
 	fs := flag.NewFlagSet("harness-client list", flag.ContinueOnError)
-	var repo string
-	fs.StringVar(&repo, "repo", "", "filter by repo alias")
+	var includeArchived bool
+	fs.BoolVar(&includeArchived, "include-archived", false, "include archived and orphaned workspaces")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -26,8 +26,8 @@ func cmdList(opts globalOpts, args []string) error {
 	defer cleanup()
 
 	toolArgs := map[string]any{}
-	if repo != "" {
-		toolArgs["repo"] = repo
+	if includeArchived {
+		toolArgs["include_archived"] = true
 	}
 
 	raw, err := callTool(ctx, c, "workspace_list", toolArgs)
