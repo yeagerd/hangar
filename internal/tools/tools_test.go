@@ -346,7 +346,19 @@ func TestWorkspaceAttachHint(t *testing.T) {
 	assert.Equal(t, "tmux attach-session -t harness-myws", out["command"])
 }
 
-func TestWorkspaceWaitIdle_AlreadyIdle(t *testing.T) {
+// perSessionCapture returns fixed content keyed by tmux session name.
+type perSessionCapture struct {
+	contents map[string]string
+}
+
+func (c *perSessionCapture) CapturePane(session string, _ int) (string, error) {
+	if content, ok := c.contents[session]; ok {
+		return content, nil
+	}
+	return "", nil
+}
+
+func TestWorkspaceWaitIdle_SingleWorkspace(t *testing.T) {
 	content := "stable\n"
 	h := paneHash(content)
 	ws := workspace.Workspace{
@@ -359,51 +371,109 @@ func TestWorkspaceWaitIdle_AlreadyIdle(t *testing.T) {
 	s := newTestServer(mgr, cap, upd)
 
 	result := callTool(t, s, "workspace_wait_idle", map[string]any{
-		"id":           "ws-1",
-		"timeout_ms":   5000,
-		"threshold_ms": 200,
+		"ids":        []any{"ws-1"},
+		"timeout_ms": 5000,
 	})
 	assert.False(t, result.IsError, textContent(t, result))
-	var out waitIdleResult
+	var out waitIdleMultiResult
 	require.NoError(t, json.Unmarshal([]byte(textContent(t, result)), &out))
-	assert.True(t, out.Idle)
 	assert.False(t, out.TimedOut)
+	require.Contains(t, out.Results, "ws-1")
+	assert.True(t, out.Results["ws-1"].Idle)
+}
+
+func TestWorkspaceWaitIdle_ModeAll_BothIdle(t *testing.T) {
+	content := "stable\n"
+	h := paneHash(content)
+	ws1 := workspace.Workspace{
+		ID: "ws-1", Name: "ws1", Status: workspace.StatusActive, TmuxSession: "s1",
+		LastCaptureHash: h, LastChangedAt: time.Now().Add(-10 * time.Second),
+	}
+	ws2 := workspace.Workspace{
+		ID: "ws-2", Name: "ws2", Status: workspace.StatusActive, TmuxSession: "s2",
+		LastCaptureHash: h, LastChangedAt: time.Now().Add(-10 * time.Second),
+	}
+	mgr := &mockManager{workspaces: []workspace.Workspace{ws1, ws2}}
+	cap := &perSessionCapture{contents: map[string]string{"s1": content, "s2": content}}
+	upd := &mockStoreUpdater{}
+	s := newTestServer(mgr, cap, upd)
+
+	result := callTool(t, s, "workspace_wait_idle", map[string]any{
+		"ids":  []any{"ws-1", "ws-2"},
+		"mode": "all",
+	})
+	assert.False(t, result.IsError, textContent(t, result))
+	var out waitIdleMultiResult
+	require.NoError(t, json.Unmarshal([]byte(textContent(t, result)), &out))
+	assert.False(t, out.TimedOut)
+	require.Contains(t, out.Results, "ws-1")
+	assert.True(t, out.Results["ws-1"].Idle)
+	require.Contains(t, out.Results, "ws-2")
+	assert.True(t, out.Results["ws-2"].Idle)
+}
+
+func TestWorkspaceWaitIdle_ModeAny_OneIdle(t *testing.T) {
+	idleContent := "stable\n"
+	idleHash := paneHash(idleContent)
+	ws1 := workspace.Workspace{
+		ID: "ws-1", Name: "ws1", Status: workspace.StatusActive, TmuxSession: "s1",
+		LastCaptureHash: idleHash, LastChangedAt: time.Now().Add(-10 * time.Second),
+	}
+	ws2 := workspace.Workspace{
+		// No prior hash — first check records the hash, elapsed < threshold → not idle.
+		ID: "ws-2", Name: "ws2", Status: workspace.StatusActive, TmuxSession: "s2",
+	}
+	mgr := &mockManager{workspaces: []workspace.Workspace{ws1, ws2}}
+	cap := &perSessionCapture{contents: map[string]string{
+		"s1": idleContent,
+		"s2": "active work\n",
+	}}
+	upd := &mockStoreUpdater{}
+	s := newTestServer(mgr, cap, upd)
+
+	result := callTool(t, s, "workspace_wait_idle", map[string]any{
+		"ids":  []any{"ws-1", "ws-2"},
+		"mode": "any",
+	})
+	assert.False(t, result.IsError, textContent(t, result))
+	var out waitIdleMultiResult
+	require.NoError(t, json.Unmarshal([]byte(textContent(t, result)), &out))
+	assert.False(t, out.TimedOut)
+	require.Contains(t, out.Results, "ws-1")
+	assert.True(t, out.Results["ws-1"].Idle)
+	require.Contains(t, out.Results, "ws-2")
+	assert.False(t, out.Results["ws-2"].Idle)
 }
 
 func TestWorkspaceWaitIdle_Timeout(t *testing.T) {
-	// Content always changes → never idle.
+	// Content changes on every call → never idle. Timeout fires before the 500 ms poll tick.
 	call := 0
-
 	ws := workspace.Workspace{
 		ID: "ws-1", Name: "myws", Status: workspace.StatusActive, TmuxSession: "harness-myws",
 	}
-
-	// Build a capture that returns distinct content each call.
 	capFunc := &funcCapture{fn: func() string {
 		call++
 		return fmt.Sprintf("line %d\n", call)
 	}}
-
 	mgr := &mockManager{workspaces: []workspace.Workspace{ws}}
 	upd := &mockStoreUpdater{}
 	s := newTestServer(mgr, capFunc, upd)
 
 	result := callTool(t, s, "workspace_wait_idle", map[string]any{
-		"id":               "ws-1",
-		"timeout_ms":       150,
-		"threshold_ms":     200,
-		"poll_interval_ms": 40,
+		"ids":        []any{"ws-1"},
+		"timeout_ms": 150,
 	})
 	assert.False(t, result.IsError, textContent(t, result))
-	var out waitIdleResult
+	var out waitIdleMultiResult
 	require.NoError(t, json.Unmarshal([]byte(textContent(t, result)), &out))
-	assert.False(t, out.Idle)
 	assert.True(t, out.TimedOut)
+	require.Contains(t, out.Results, "ws-1")
+	assert.False(t, out.Results["ws-1"].Idle)
 }
 
 func TestWorkspaceWaitIdle_NotFound(t *testing.T) {
 	s := newTestServer(&mockManager{}, &mockPaneCapture{}, &mockStoreUpdater{})
-	result := callTool(t, s, "workspace_wait_idle", map[string]any{"id": "ghost"})
+	result := callTool(t, s, "workspace_wait_idle", map[string]any{"ids": []any{"ghost"}})
 	assert.True(t, result.IsError)
 }
 
@@ -412,7 +482,25 @@ func TestWorkspaceWaitIdle_NotActive(t *testing.T) {
 		{ID: "ws-1", Name: "myws", Status: workspace.StatusArchived},
 	}}
 	s := newTestServer(mgr, &mockPaneCapture{}, &mockStoreUpdater{})
-	result := callTool(t, s, "workspace_wait_idle", map[string]any{"id": "ws-1"})
+	result := callTool(t, s, "workspace_wait_idle", map[string]any{"ids": []any{"ws-1"}})
+	assert.True(t, result.IsError)
+}
+
+func TestWorkspaceWaitIdle_EmptyIDs(t *testing.T) {
+	s := newTestServer(&mockManager{}, &mockPaneCapture{}, &mockStoreUpdater{})
+	result := callTool(t, s, "workspace_wait_idle", map[string]any{"ids": []any{}})
+	assert.True(t, result.IsError)
+}
+
+func TestWorkspaceWaitIdle_InvalidMode(t *testing.T) {
+	mgr := &mockManager{workspaces: []workspace.Workspace{
+		{ID: "ws-1", Name: "myws", Status: workspace.StatusActive, TmuxSession: "s1"},
+	}}
+	s := newTestServer(mgr, &mockPaneCapture{}, &mockStoreUpdater{})
+	result := callTool(t, s, "workspace_wait_idle", map[string]any{
+		"ids":  []any{"ws-1"},
+		"mode": "invalid",
+	})
 	assert.True(t, result.IsError)
 }
 

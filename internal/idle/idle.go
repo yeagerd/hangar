@@ -144,6 +144,142 @@ func WaitUntilIdle(
 	}
 }
 
+// WaitUntilIdleMulti polls multiple workspaces until the idle condition is satisfied.
+// mode "all" (default): returns when every workspace is idle.
+// mode "any": returns as soon as at least one workspace is idle.
+// timeoutMs ≤ 0 defaults to 600 000 ms. Poll interval is hardcoded at 500 ms.
+// Returns a map of workspace ID → idle flag and a timedOut boolean.
+func WaitUntilIdleMulti(
+	ctx context.Context,
+	workspaces []WorkspaceState,
+	capture PaneCapture,
+	updater WorkspaceUpdater,
+	thresholdMs, timeoutMs int64,
+	mode string,
+) (map[string]bool, bool) {
+	if timeoutMs <= 0 {
+		timeoutMs = 600_000
+	}
+	if mode == "" {
+		mode = "all"
+	}
+
+	deadline := time.Now().Add(time.Duration(timeoutMs) * time.Millisecond)
+	ctx, cancel := context.WithDeadline(ctx, deadline)
+	defer cancel()
+
+	states := make([]WorkspaceState, len(workspaces))
+	copy(states, workspaces)
+	doneIDs := make(map[string]bool, len(workspaces))
+
+	buildResult := func() map[string]bool {
+		out := make(map[string]bool, len(workspaces))
+		for _, ws := range workspaces {
+			out[ws.ID] = doneIDs[ws.ID]
+		}
+		return out
+	}
+
+	satisfied := func() bool {
+		if mode == "any" {
+			for _, d := range doneIDs {
+				if d {
+					return true
+				}
+			}
+			return false
+		}
+		// "all"
+		for i := range states {
+			if !doneIDs[states[i].ID] {
+				return false
+			}
+		}
+		return true
+	}
+
+	runCheck := func() {
+		type paneResult struct {
+			stateIdx int
+			hash     string
+			changed  time.Time
+			isIdle   bool
+			err      error
+		}
+
+		toCheck := make([]int, 0, len(states))
+		for i := range states {
+			if !doneIDs[states[i].ID] {
+				toCheck = append(toCheck, i)
+			}
+		}
+		if len(toCheck) == 0 {
+			return
+		}
+
+		ch := make(chan paneResult, len(toCheck))
+		var wg sync.WaitGroup
+		for _, idx := range toCheck {
+			wg.Add(1)
+			go func(i int, ws WorkspaceState) {
+				defer wg.Done()
+				content, err := capture.CapturePane(ws.TmuxSession, 200)
+				if err != nil {
+					ch <- paneResult{stateIdx: i, err: err}
+					return
+				}
+				hash := hashContent(content)
+				if hash != ws.LastCaptureHash {
+					now := time.Now()
+					if upErr := updater.UpdateIdleState(ws.ID, hash, now); upErr != nil {
+						fmt.Fprintf(os.Stderr, "WaitUntilIdleMulti: update error for %s: %v\n", ws.ID, upErr)
+					}
+					ch <- paneResult{stateIdx: i, hash: hash, changed: now}
+					return
+				}
+				elapsed := time.Since(ws.LastChangedAt).Milliseconds()
+				ch <- paneResult{stateIdx: i, hash: ws.LastCaptureHash, changed: ws.LastChangedAt, isIdle: elapsed >= thresholdMs}
+			}(idx, states[idx])
+		}
+		wg.Wait()
+		close(ch)
+
+		for r := range ch {
+			if r.err != nil {
+				fmt.Fprintf(os.Stderr, "WaitUntilIdleMulti: capture error: %v\n", r.err)
+				continue
+			}
+			states[r.stateIdx].LastCaptureHash = r.hash
+			states[r.stateIdx].LastChangedAt = r.changed
+			if r.isIdle {
+				doneIDs[states[r.stateIdx].ID] = true
+			}
+		}
+	}
+
+	// Immediate first check so callers don't wait a full poll interval when already idle.
+	runCheck()
+	if satisfied() {
+		return buildResult(), false
+	}
+
+	const pollMs int64 = 500
+	ticker := time.NewTicker(time.Duration(pollMs) * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return buildResult(), true
+		case <-ticker.C:
+			runCheck()
+			if satisfied() {
+				return buildResult(), false
+			}
+		}
+	}
+}
+
 // trackingUpdater wraps a WorkspaceUpdater and records the most recent hash/time per workspace ID
 // so IsIdle can refresh workspace state between the two passes.
 type trackingUpdater struct {

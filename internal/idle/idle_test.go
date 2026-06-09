@@ -309,6 +309,63 @@ func TestWaitUntilIdle_Timeout(t *testing.T) {
 	assert.ErrorIs(t, err, context.DeadlineExceeded)
 }
 
+func TestWaitUntilIdleMulti_AllMode_BothIdle(t *testing.T) {
+	content := "stable\n"
+	h := hashContent(content)
+	ws1 := WorkspaceState{
+		ID: "ws-1", Name: "myws1", TmuxSession: "s1",
+		LastCaptureHash: h, LastChangedAt: time.Now().Add(-10 * time.Second),
+	}
+	ws2 := WorkspaceState{
+		ID: "ws-2", Name: "myws2", TmuxSession: "s2",
+		LastCaptureHash: h, LastChangedAt: time.Now().Add(-10 * time.Second),
+	}
+	cap := &multiCapture{results: map[string]captureEntry{
+		"s1": {content: content},
+		"s2": {content: content},
+	}}
+	upd := &mockUpdater{}
+
+	results, timedOut := WaitUntilIdleMulti(context.Background(), []WorkspaceState{ws1, ws2}, cap, upd, 5000, 1000, "all")
+	assert.False(t, timedOut)
+	assert.True(t, results["ws-1"])
+	assert.True(t, results["ws-2"])
+}
+
+func TestWaitUntilIdleMulti_AnyMode_OneIdle(t *testing.T) {
+	idleContent := "stable\n"
+	idleHash := hashContent(idleContent)
+	ws1 := WorkspaceState{
+		ID: "ws-1", Name: "idle", TmuxSession: "s1",
+		LastCaptureHash: idleHash, LastChangedAt: time.Now().Add(-10 * time.Second),
+	}
+	ws2 := WorkspaceState{
+		// No prior hash — first check records hash, elapsed < threshold → not idle.
+		ID: "ws-2", Name: "busy", TmuxSession: "s2",
+	}
+	cap := &multiCapture{results: map[string]captureEntry{
+		"s1": {content: idleContent},
+		"s2": {content: "active\n"},
+	}}
+	upd := &mockUpdater{}
+
+	results, timedOut := WaitUntilIdleMulti(context.Background(), []WorkspaceState{ws1, ws2}, cap, upd, 5000, 1000, "any")
+	assert.False(t, timedOut)
+	assert.True(t, results["ws-1"])
+	assert.False(t, results["ws-2"])
+}
+
+func TestWaitUntilIdleMulti_Timeout(t *testing.T) {
+	// Content keeps changing → never idle; timeout fires before first 500 ms tick.
+	ws := WorkspaceState{ID: "ws-1", Name: "myws", TmuxSession: "s1"}
+	cap := &toggleCapture{toggle: [2]string{"a\n", "b\n"}, stableN: 1000}
+	upd := &mockUpdater{}
+
+	results, timedOut := WaitUntilIdleMulti(context.Background(), []WorkspaceState{ws}, cap, upd, 200, 120, "all")
+	assert.True(t, timedOut)
+	assert.False(t, results["ws-1"])
+}
+
 func TestWaitUntilIdle_CtxCancellation(t *testing.T) {
 	cap := &toggleCapture{toggle: [2]string{"a\n", "b\n"}, stableN: 1000}
 	upd := &mockUpdater{}
