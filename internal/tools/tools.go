@@ -102,6 +102,7 @@ func checkIdleAll(
 	workspaces []workspace.Workspace,
 	capture PaneCapture,
 	updater StoreUpdater,
+	getWS func(string) (workspace.Workspace, error),
 	thresholdMs, pollMs int64,
 ) map[string]idle.IdleStatus {
 	if len(workspaces) == 0 {
@@ -121,12 +122,11 @@ func checkIdleAll(
 			wg.Add(1)
 			go func(w workspace.Workspace) {
 				defer wg.Done()
-				// Bridge to store.Workspace until idle package is updated in Task 7.
-				swIdle := store.Workspace{
+				wsState := idle.WorkspaceState{
 					ID: w.ID, Name: w.Name, TmuxSession: w.TmuxSession,
 					LastCaptureHash: w.LastCaptureHash, LastChangedAt: w.LastChangedAt,
 				}
-				s, err := idle.Check(ctx, swIdle, capture, updater, thresholdMs)
+				s, err := idle.Check(ctx, wsState, capture, updater, thresholdMs)
 				ch <- result{id: w.ID, status: s, err: err}
 			}(ws)
 		}
@@ -146,17 +146,15 @@ func checkIdleAll(
 	// First pass.
 	fanOut(workspaces)
 
-	// Re-fetch idle state so the second pass uses updated LastCaptureHash/LastChangedAt.
+	// Re-fetch workspace state so the second pass uses updated LastCaptureHash/LastChangedAt.
 	refreshed := make([]workspace.Workspace, 0, len(workspaces))
 	for _, ws := range workspaces {
-		updated, err := updater.Get(ws.ID)
+		updated, err := getWS(ws.ID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "checkIdleAll: re-fetch error for %s: %v; using stale state\n", ws.ID, err)
 			refreshed = append(refreshed, ws)
 		} else {
-			ws.LastCaptureHash = updated.LastCaptureHash
-			ws.LastChangedAt = updated.LastChangedAt
-			refreshed = append(refreshed, ws)
+			refreshed = append(refreshed, updated)
 		}
 	}
 
@@ -251,7 +249,7 @@ func Register(s *server.MCPServer, mgr Manager, capture PaneCapture, storeUpd St
 
 		var idleMap map[string]idle.IdleStatus
 		if checkIdle {
-			idleMap = checkIdleAll(ctx, active, capture, storeUpd, defaultThresholdMs, int64(pollMs))
+			idleMap = checkIdleAll(ctx, active, capture, storeUpd, mgr.Get, defaultThresholdMs, int64(pollMs))
 		}
 
 		summaries := make([]workspaceSummary, len(workspaces))

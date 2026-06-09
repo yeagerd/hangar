@@ -198,9 +198,7 @@ func TestWorkspaceList_CheckIdleTrue(t *testing.T) {
 	}
 	mgr := &mockManager{workspaces: []workspace.Workspace{ws}}
 	cap := &mockPaneCapture{content: content}
-	upd := &mockStoreUpdater{data: map[string]store.Workspace{"ws-1": {
-		ID: "ws-1", LastCaptureHash: h, LastChangedAt: ws.LastChangedAt,
-	}}}
+	upd := &mockStoreUpdater{}
 	s := newTestServer(mgr, cap, upd)
 
 	result := callTool(t, s, "workspace_list", map[string]any{"check_idle": true, "idle_poll_ms": 50})
@@ -225,9 +223,7 @@ func TestWorkspaceList_CheckIdleFalse(t *testing.T) {
 	}
 	mgr := &mockManager{workspaces: []workspace.Workspace{ws}}
 	cap := &mockPaneCapture{content: content}
-	upd := &mockStoreUpdater{data: map[string]store.Workspace{"ws-1": {
-		ID: "ws-1", LastCaptureHash: h, LastChangedAt: ws.LastChangedAt,
-	}}}
+	upd := &mockStoreUpdater{}
 	s := newTestServer(mgr, cap, upd)
 
 	result := callTool(t, s, "workspace_list", map[string]any{"check_idle": false})
@@ -250,9 +246,7 @@ func TestWorkspaceList_IdlePollMsClamp(t *testing.T) {
 	}
 	mgr := &mockManager{workspaces: []workspace.Workspace{ws}}
 	cap := &mockPaneCapture{content: content}
-	upd := &mockStoreUpdater{data: map[string]store.Workspace{"ws-1": {
-		ID: "ws-1", LastCaptureHash: h, LastChangedAt: ws.LastChangedAt,
-	}}}
+	upd := &mockStoreUpdater{}
 	s := newTestServer(mgr, cap, upd)
 
 	// Below floor (5 → clamped to 50): should succeed and populate idle fields.
@@ -481,11 +475,10 @@ func TestCheckIdleAll_AlreadyIdle(t *testing.T) {
 		LastCaptureHash: h, LastChangedAt: time.Now().Add(-10 * time.Second),
 	}
 	cap := &mockPaneCapture{content: content}
-	upd := &mockStoreUpdater{data: map[string]store.Workspace{"ws-1": {
-		ID: "ws-1", LastCaptureHash: h, LastChangedAt: ws.LastChangedAt,
-	}}}
+	upd := &mockStoreUpdater{}
+	getWS := func(id string) (workspace.Workspace, error) { return ws, nil }
 
-	result := checkIdleAll(context.Background(), []workspace.Workspace{ws}, cap, upd, 5000, 50)
+	result := checkIdleAll(context.Background(), []workspace.Workspace{ws}, cap, upd, getWS, 5000, 50)
 
 	require.Contains(t, result, "ws-1")
 	assert.True(t, result["ws-1"].Idle)
@@ -500,16 +493,18 @@ func TestCheckIdleAll_Busy(t *testing.T) {
 		call++
 		return fmt.Sprintf("line %d\n", call)
 	}}
-	upd := &mockStoreUpdater{data: map[string]store.Workspace{"ws-1": {ID: "ws-1"}}}
+	upd := &mockStoreUpdater{}
+	getWS := func(id string) (workspace.Workspace, error) { return ws, nil }
 
-	result := checkIdleAll(context.Background(), []workspace.Workspace{ws}, cap, upd, 5000, 50)
+	result := checkIdleAll(context.Background(), []workspace.Workspace{ws}, cap, upd, getWS, 5000, 50)
 
 	require.Contains(t, result, "ws-1")
 	assert.False(t, result["ws-1"].Idle)
 }
 
 func TestCheckIdleAll_Empty(t *testing.T) {
-	result := checkIdleAll(context.Background(), nil, &mockPaneCapture{}, &mockStoreUpdater{}, 5000, 50)
+	getWS := func(id string) (workspace.Workspace, error) { return workspace.Workspace{}, nil }
+	result := checkIdleAll(context.Background(), nil, &mockPaneCapture{}, &mockStoreUpdater{}, getWS, 5000, 50)
 	assert.Empty(t, result)
 }
 

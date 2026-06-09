@@ -19,13 +19,19 @@ func newTestStore(t *testing.T) *Store {
 func newWS(name string) Workspace {
 	return Workspace{
 		Name:          name,
-		TmuxSession:   "harness-" + name,
-		WorktreePath:  "/tmp/" + name,
 		Branch:        name,
-		Status:        StatusActive,
 		CreatedAt:     time.Now(),
 		LastChangedAt: time.Now(),
 	}
+}
+
+// archiveWS sets ArchivedAt on a store record to simulate archiving.
+func archiveWS(t *testing.T, s *Store, id string) {
+	t.Helper()
+	now := time.Now()
+	require.NoError(t, s.Update(id, func(w *Workspace) {
+		w.ArchivedAt = &now
+	}))
 }
 
 func TestNewStore_Empty(t *testing.T) {
@@ -68,17 +74,14 @@ func TestAdd_NameConflict(t *testing.T) {
 
 func TestAdd_AllowsDuplicateNameIfArchived(t *testing.T) {
 	s := newTestStore(t)
-	ws := newWS("reuse")
-	require.NoError(t, s.Add(ws))
+	require.NoError(t, s.Add(newWS("reuse")))
 	all := s.List(true)
 	require.Len(t, all, 1)
 
-	// Archive it.
-	require.NoError(t, s.Update(all[0].ID, func(w *Workspace) {
-		w.Status = StatusArchived
-	}))
+	// Archive it by setting ArchivedAt.
+	archiveWS(t, s, all[0].ID)
 
-	// Add another with the same name.
+	// Add another with the same name — allowed because the existing one is archived.
 	require.NoError(t, s.Add(newWS("reuse")))
 }
 
@@ -105,13 +108,29 @@ func TestGetByName_Active(t *testing.T) {
 	ws, err := s.GetByName("byname")
 	require.NoError(t, err)
 	assert.Equal(t, "byname", ws.Name)
-	assert.Equal(t, StatusActive, ws.Status)
+	assert.Nil(t, ws.ArchivedAt, "non-archived workspace should have nil ArchivedAt")
 }
 
 func TestGetByName_NotFound(t *testing.T) {
 	s := newTestStore(t)
 	_, err := s.GetByName("ghost")
 	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestGetByName_PrefersNonArchived(t *testing.T) {
+	s := newTestStore(t)
+	// Add then archive a workspace.
+	require.NoError(t, s.Add(newWS("prefer")))
+	all := s.List(true)
+	archiveWS(t, s, all[0].ID)
+
+	// Add a second non-archived workspace with the same name — conflict check allows it
+	// because the first is archived.
+	require.NoError(t, s.Add(newWS("prefer")))
+
+	ws, err := s.GetByName("prefer")
+	require.NoError(t, err)
+	assert.Nil(t, ws.ArchivedAt, "GetByName should prefer the non-archived entry")
 }
 
 func TestList_ExcludesArchived(t *testing.T) {
@@ -122,10 +141,8 @@ func TestList_ExcludesArchived(t *testing.T) {
 	all := s.List(true)
 	require.Len(t, all, 2)
 
-	// Archive one.
-	require.NoError(t, s.Update(all[1].ID, func(w *Workspace) {
-		w.Status = StatusArchived
-	}))
+	// Archive one via ArchivedAt.
+	archiveWS(t, s, all[1].ID)
 
 	active := s.List(false)
 	require.Len(t, active, 1)
@@ -140,13 +157,14 @@ func TestUpdate_Happy(t *testing.T) {
 	require.NoError(t, s.Add(newWS("upd")))
 	id := s.List(true)[0].ID
 
+	now := time.Now()
 	require.NoError(t, s.Update(id, func(w *Workspace) {
-		w.Status = StatusArchived
+		w.ArchivedAt = &now
 	}))
 
 	ws, err := s.Get(id)
 	require.NoError(t, err)
-	assert.Equal(t, StatusArchived, ws.Status)
+	assert.NotNil(t, ws.ArchivedAt)
 }
 
 func TestUpdate_NotFound(t *testing.T) {
@@ -173,6 +191,20 @@ func TestDelete_NotFound(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
+func TestUpdateIdleState(t *testing.T) {
+	s := newTestStore(t)
+	require.NoError(t, s.Add(newWS("idle-ws")))
+	id := s.List(true)[0].ID
+
+	now := time.Now()
+	require.NoError(t, s.UpdateIdleState(id, "abc123", now))
+
+	ws, err := s.Get(id)
+	require.NoError(t, err)
+	assert.Equal(t, "abc123", ws.LastCaptureHash)
+	assert.Equal(t, now.Unix(), ws.LastChangedAt.Unix())
+}
+
 func TestConcurrentAccess(t *testing.T) {
 	s := newTestStore(t)
 	const workers = 10
@@ -181,28 +213,14 @@ func TestConcurrentAccess(t *testing.T) {
 	// Writers.
 	for i := 0; i < workers; i++ {
 		wg.Add(1)
-		go func(n int) {
+		go func() {
 			defer wg.Done()
-			ws := newWS("")
-			ws.Name = ""
-			// Each goroutine gets a unique ID via uuid in Add.
-			ws.Name = "" // let Add generate the ID; give unique name via worktree path
-			ws.WorktreePath = "/tmp/worker"
-			ws.TmuxSession = "harness-worker"
-			// Use unique names to avoid conflicts.
-			ws.Name = "worker"
-			ws.ID = ""
-			// Suppress name conflict by using unique names.
 			_ = s.Add(Workspace{
 				Name:          "",
-				TmuxSession:   "harness-concurrent",
-				WorktreePath:  "/tmp/concurrent",
-				Branch:        "main",
-				Status:        StatusActive,
 				CreatedAt:     time.Now(),
 				LastChangedAt: time.Now(),
 			})
-		}(i)
+		}()
 	}
 
 	// Readers run concurrently with writers.
@@ -228,16 +246,9 @@ func TestConcurrentNamedAdd(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			ws := newWS("")
-			// Force a unique Name per goroutine.
-			ws.Name = ""
-			_ = ws
 			errCh <- s.Add(Workspace{
 				Name:          generateName(idx),
-				TmuxSession:   "harness-" + generateName(idx),
-				WorktreePath:  "/tmp/" + generateName(idx),
 				Branch:        generateName(idx),
-				Status:        StatusActive,
 				CreatedAt:     time.Now(),
 				LastChangedAt: time.Now(),
 			})

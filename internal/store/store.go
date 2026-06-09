@@ -13,23 +13,14 @@ import (
 	"github.com/google/uuid"
 )
 
-// WorkspaceStatus describes the lifecycle state of a workspace.
-type WorkspaceStatus string
-
-const (
-	StatusActive   WorkspaceStatus = "active"
-	StatusArchived WorkspaceStatus = "archived"
-	StatusOrphaned WorkspaceStatus = "orphaned"
-)
-
 // Workspace is a single registry entry.
+// TmuxSession, WorktreePath, and Status are no longer persisted; they are derived at query
+// time by workspace.Manager.buildWorkspace. Old JSON files containing those keys load
+// without error — json.Unmarshal silently ignores unknown fields.
 type Workspace struct {
 	ID              string            `json:"id"`
 	Name            string            `json:"name"`
-	TmuxSession     string            `json:"tmuxSession"`
-	WorktreePath    string            `json:"worktreePath"`
 	Branch          string            `json:"branch"`
-	Status          WorkspaceStatus   `json:"status"`
 	CreatedAt       time.Time         `json:"createdAt"`
 	ArchivedAt      *time.Time        `json:"archivedAt,omitempty"`
 	LastCaptureHash string            `json:"lastCaptureHash"`
@@ -40,7 +31,7 @@ type Workspace struct {
 // ErrNotFound is returned when a lookup by ID or name yields no result.
 var ErrNotFound = errors.New("workspace not found")
 
-// ErrNameConflict is returned when adding a workspace whose name already exists with status active.
+// ErrNameConflict is returned when adding a workspace whose name already exists and is not archived.
 var ErrNameConflict = errors.New("active workspace with that name already exists")
 
 // Store is a concurrency-safe registry backed by a JSON file.
@@ -72,7 +63,7 @@ func NewStore(path string) (*Store, error) {
 	return s, nil
 }
 
-// Add inserts a new workspace. Rejects if an active workspace with the same name already exists.
+// Add inserts a new workspace. Rejects if a non-archived workspace with the same name exists.
 // The workspace ID is generated here if it is empty.
 func (s *Store) Add(ws Workspace) error {
 	if ws.ID == "" {
@@ -83,7 +74,7 @@ func (s *Store) Add(ws Workspace) error {
 	defer s.mu.Unlock()
 
 	for _, existing := range s.data {
-		if existing.Name == ws.Name && existing.Status == StatusActive {
+		if existing.Name == ws.Name && existing.ArchivedAt == nil {
 			return fmt.Errorf("%w: %s", ErrNameConflict, ws.Name)
 		}
 	}
@@ -105,7 +96,7 @@ func (s *Store) Get(id string) (Workspace, error) {
 	return Workspace{}, fmt.Errorf("%w: id=%s", ErrNotFound, id)
 }
 
-// GetByName returns a workspace by name (first active match, then any match).
+// GetByName returns a workspace by name (first non-archived match, then any match).
 func (s *Store) GetByName(name string) (Workspace, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -113,7 +104,7 @@ func (s *Store) GetByName(name string) (Workspace, error) {
 	var fallback *Workspace
 	for i := range s.data {
 		if s.data[i].Name == name {
-			if s.data[i].Status == StatusActive {
+			if s.data[i].ArchivedAt == nil {
 				return s.data[i], nil
 			}
 			if fallback == nil {
@@ -127,14 +118,14 @@ func (s *Store) GetByName(name string) (Workspace, error) {
 	return Workspace{}, fmt.Errorf("%w: name=%s", ErrNotFound, name)
 }
 
-// List returns all workspaces. If includeArchived is false, archived and orphaned are excluded.
+// List returns all workspaces. If includeArchived is false, archived workspaces are excluded.
 func (s *Store) List(includeArchived bool) []Workspace {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	result := make([]Workspace, 0, len(s.data))
 	for _, ws := range s.data {
-		if !includeArchived && ws.Status != StatusActive {
+		if !includeArchived && ws.ArchivedAt != nil {
 			continue
 		}
 		result = append(result, ws)
@@ -157,7 +148,7 @@ func (s *Store) Update(id string, apply func(*Workspace)) error {
 }
 
 // Delete hard-deletes a workspace by ID from the JSON file.
-// Normal lifecycle changes should use Update to set status instead.
+// Normal lifecycle changes should set ArchivedAt via Update instead.
 func (s *Store) Delete(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
