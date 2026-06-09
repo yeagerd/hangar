@@ -91,8 +91,14 @@ func toSummary(ws workspace.Workspace) workspaceSummary {
 
 // waitIdleMultiResult is the JSON shape returned by workspace_wait_idle.
 type waitIdleMultiResult struct {
-	TimedOut bool                  `json:"timed_out"`
-	Results  map[string]idleEntry  `json:"results"`
+	TimedOut bool                 `json:"timed_out"`
+	Results  map[string]idleEntry `json:"results"`
+}
+
+// listWaitResult is the JSON shape returned by workspace_list when a wait flag is set.
+type listWaitResult struct {
+	TimedOut   bool               `json:"timed_out"`
+	Workspaces []workspaceSummary `json:"workspaces"`
 }
 
 type idleEntry struct {
@@ -147,8 +153,25 @@ func Register(s *server.MCPServer, mgr Manager, capture PaneCapture, storeUpd St
 		mcp.WithBoolean("include_archived",
 			mcp.Description("Include archived and orphaned workspaces"),
 		),
+		mcp.WithBoolean("wait_any_idle",
+			mcp.Description("Block until at least one active workspace is idle, then return the list"),
+		),
+		mcp.WithBoolean("wait_all_idle",
+			mcp.Description("Block until all active workspaces are idle, then return the list"),
+		),
+		mcp.WithNumber("timeout_ms",
+			mcp.Description("Maximum wait in milliseconds when a wait flag is set (default 600000 = 10 min)"),
+		),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		includeArchived := req.GetBool("include_archived", false)
+		waitAny := req.GetBool("wait_any_idle", false)
+		waitAll := req.GetBool("wait_all_idle", false)
+		timeoutMs := int64(req.GetFloat("timeout_ms", 600_000))
+
+		if waitAny && waitAll {
+			return mcp.NewToolResultError("wait_any_idle and wait_all_idle are mutually exclusive"), nil
+		}
+
 		workspaces := mgr.List(includeArchived)
 
 		wsStates := make([]idle.WorkspaceState, 0, len(workspaces))
@@ -161,16 +184,33 @@ func Register(s *server.MCPServer, mgr Manager, capture PaneCapture, storeUpd St
 			}
 		}
 
+		if waitAny || waitAll {
+			mode := "all"
+			if waitAny {
+				mode = "any"
+			}
+			idleMap, timedOut := idle.WaitUntilIdleMulti(ctx, wsStates, capture, storeUpd, defaultThresholdMs, timeoutMs, mode)
+			summaries := make([]workspaceSummary, len(workspaces))
+			for i, ws := range workspaces {
+				sum := toSummary(ws)
+				if isIdle, ok := idleMap[ws.ID]; ok {
+					sum.IdleStatus = &isIdle
+				}
+				summaries[i] = sum
+			}
+			return jsonText(listWaitResult{TimedOut: timedOut, Workspaces: summaries})
+		}
+
 		idleMap := idle.IsIdle(ctx, wsStates, capture, storeUpd, defaultThresholdMs, 0)
 
 		summaries := make([]workspaceSummary, len(workspaces))
 		for i, ws := range workspaces {
-			s := toSummary(ws)
+			sum := toSummary(ws)
 			if is, ok := idleMap[ws.ID]; ok {
 				idleStatus := is.Idle
-				s.IdleStatus = &idleStatus
+				sum.IdleStatus = &idleStatus
 			}
-			summaries[i] = s
+			summaries[i] = sum
 		}
 		return jsonText(summaries)
 	})

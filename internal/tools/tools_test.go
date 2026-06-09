@@ -230,6 +230,66 @@ func TestWorkspaceList_AlwaysChecksIdle(t *testing.T) {
 	assert.True(t, *summaries[0].IdleStatus)
 }
 
+func TestWorkspaceList_WaitAnyIdle(t *testing.T) {
+	content := "stable\n"
+	h := paneHash(content)
+	ws := workspace.Workspace{
+		ID: "ws-1", Name: "myws", Status: workspace.StatusActive, TmuxSession: "harness-myws",
+		LastCaptureHash: h, LastChangedAt: time.Now().Add(-10 * time.Second),
+	}
+	mgr := &mockManager{workspaces: []workspace.Workspace{ws}}
+	cap := &mockPaneCapture{content: content}
+	upd := &mockStoreUpdater{}
+	s := newTestServer(mgr, cap, upd)
+
+	result := callTool(t, s, "workspace_list", map[string]any{
+		"wait_any_idle": true,
+		"timeout_ms":    5000,
+	})
+	assert.False(t, result.IsError, textContent(t, result))
+	var out listWaitResult
+	require.NoError(t, json.Unmarshal([]byte(textContent(t, result)), &out))
+	assert.False(t, out.TimedOut)
+	require.Len(t, out.Workspaces, 1)
+	require.NotNil(t, out.Workspaces[0].IdleStatus)
+	assert.True(t, *out.Workspaces[0].IdleStatus)
+}
+
+func TestWorkspaceList_WaitAllIdle_Timeout(t *testing.T) {
+	call := 0
+	ws := workspace.Workspace{
+		ID: "ws-1", Name: "myws", Status: workspace.StatusActive, TmuxSession: "harness-myws",
+	}
+	capFunc := &funcCapture{fn: func() string {
+		call++
+		return fmt.Sprintf("line %d\n", call)
+	}}
+	mgr := &mockManager{workspaces: []workspace.Workspace{ws}}
+	upd := &mockStoreUpdater{}
+	s := newTestServer(mgr, capFunc, upd)
+
+	result := callTool(t, s, "workspace_list", map[string]any{
+		"wait_all_idle": true,
+		"timeout_ms":    150,
+	})
+	assert.False(t, result.IsError, textContent(t, result))
+	var out listWaitResult
+	require.NoError(t, json.Unmarshal([]byte(textContent(t, result)), &out))
+	assert.True(t, out.TimedOut)
+	require.Len(t, out.Workspaces, 1)
+	require.NotNil(t, out.Workspaces[0].IdleStatus)
+	assert.False(t, *out.Workspaces[0].IdleStatus)
+}
+
+func TestWorkspaceList_BothWaitFlags_Error(t *testing.T) {
+	s := newTestServer(&mockManager{}, &mockPaneCapture{}, &mockStoreUpdater{})
+	result := callTool(t, s, "workspace_list", map[string]any{
+		"wait_any_idle": true,
+		"wait_all_idle": true,
+	})
+	assert.True(t, result.IsError)
+}
+
 func TestWorkspaceCreate_Happy(t *testing.T) {
 	mgr := &mockManager{}
 	s := newTestServer(mgr, &mockPaneCapture{}, &mockStoreUpdater{})
