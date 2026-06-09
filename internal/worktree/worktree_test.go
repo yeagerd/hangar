@@ -161,3 +161,38 @@ func TestPrune_Error(t *testing.T) {
 	err := c.Prune()
 	assert.Error(t, err)
 }
+
+func TestFindByPath(t *testing.T) {
+	fixture := loadFixture(t)
+
+	tests := []struct {
+		path      string
+		wantFound bool
+		wantBranch string
+	}{
+		{"/home/user/repo", true, "main"},
+		{"/home/user/worktrees/feature-branch", true, "feature-branch"},
+		{"/home/user/worktrees/detached-head", true, ""},
+		{"/nonexistent/path", false, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			m := &mockExecutor{out: []byte(fixture)}
+			c := NewWithExecutor("/repo", m)
+			info, ok := c.FindByPath(tt.path)
+			assert.Equal(t, tt.wantFound, ok)
+			if tt.wantFound {
+				assert.Equal(t, tt.path, info.Path)
+				assert.Equal(t, tt.wantBranch, info.Branch)
+			}
+		})
+	}
+}
+
+func TestFindByPath_ListError(t *testing.T) {
+	m := &mockExecutor{err: errors.New("exit status 128")}
+	c := NewWithExecutor("/repo", m)
+	_, ok := c.FindByPath("/any/path")
+	assert.False(t, ok)
+}

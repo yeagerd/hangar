@@ -103,6 +103,20 @@ func (c *Client) Prune() error {
 	return nil
 }
 
+// FindByPath returns the WorktreeInfo whose Path matches path, or false if absent.
+func (c *Client) FindByPath(path string) (WorktreeInfo, bool) {
+	infos, err := c.List()
+	if err != nil {
+		return WorktreeInfo{}, false
+	}
+	for _, info := range infos {
+		if info.Path == path {
+			return info, true
+		}
+	}
+	return WorktreeInfo{}, false
+}
+
 // parsePorcelain parses the output of `git worktree list --porcelain` into a slice of
 // WorktreeInfo. Pure function with no exec dependency — call it directly from tests.
 func parsePorcelain(output string) []WorktreeInfo {
