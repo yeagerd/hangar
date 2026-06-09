@@ -95,6 +95,72 @@ func toSummary(ws store.Workspace) workspaceSummary {
 	}
 }
 
+// checkIdleAll runs idle.Check on all workspaces concurrently, waits pollMs, then runs a
+// second round concurrently using refreshed workspace state, and returns a map of workspace
+// ID → final IdleStatus. Per-workspace errors are logged to stderr; the key is omitted from
+// the result (caller treats absent key as non-idle).
+func checkIdleAll(
+	ctx context.Context,
+	workspaces []store.Workspace,
+	capture PaneCapture,
+	updater StoreUpdater,
+	thresholdMs, pollMs int64,
+) map[string]idle.IdleStatus {
+	if len(workspaces) == 0 {
+		return map[string]idle.IdleStatus{}
+	}
+
+	type result struct {
+		id     string
+		status idle.IdleStatus
+		err    error
+	}
+
+	fanOut := func(wss []store.Workspace) map[string]idle.IdleStatus {
+		ch := make(chan result, len(wss))
+		var wg sync.WaitGroup
+		for _, ws := range wss {
+			wg.Add(1)
+			go func(w store.Workspace) {
+				defer wg.Done()
+				s, err := idle.Check(ctx, w, capture, updater, thresholdMs)
+				ch <- result{id: w.ID, status: s, err: err}
+			}(ws)
+		}
+		wg.Wait()
+		close(ch)
+		out := make(map[string]idle.IdleStatus, len(wss))
+		for r := range ch {
+			if r.err != nil {
+				fmt.Fprintf(os.Stderr, "checkIdleAll: idle.Check error for %s: %v\n", r.id, r.err)
+				continue
+			}
+			out[r.id] = r.status
+		}
+		return out
+	}
+
+	// First pass.
+	fanOut(workspaces)
+
+	// Re-fetch workspace state so the second pass uses updated LastCaptureHash/LastChangedAt.
+	refreshed := make([]store.Workspace, 0, len(workspaces))
+	for _, ws := range workspaces {
+		updated, err := updater.Get(ws.ID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "checkIdleAll: re-fetch error for %s: %v; using stale state\n", ws.ID, err)
+			refreshed = append(refreshed, ws)
+		} else {
+			refreshed = append(refreshed, updated)
+		}
+	}
+
+	time.Sleep(time.Duration(pollMs) * time.Millisecond)
+
+	// Second pass — return these results.
+	return fanOut(refreshed)
+}
+
 // waitIdleResult is the JSON shape returned by workspace_wait_idle.
 type waitIdleResult struct {
 	Idle          bool      `json:"idle"`

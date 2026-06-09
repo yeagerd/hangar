@@ -396,6 +396,46 @@ func (f *funcCapture) CapturePane(_ string, _ int) (string, error) {
 	return f.fn(), nil
 }
 
+// ---- checkIdleAll tests ----
+
+func TestCheckIdleAll_AlreadyIdle(t *testing.T) {
+	content := "stable\n"
+	h := paneHash(content)
+	ws := store.Workspace{
+		ID: "ws-1", Name: "myws", Status: store.StatusActive, TmuxSession: "harness-myws",
+		LastCaptureHash: h, LastChangedAt: time.Now().Add(-10 * time.Second),
+	}
+	cap := &mockPaneCapture{content: content}
+	upd := &mockStoreUpdater{data: map[string]store.Workspace{"ws-1": ws}}
+
+	result := checkIdleAll(context.Background(), []store.Workspace{ws}, cap, upd, 5000, 50)
+
+	require.Contains(t, result, "ws-1")
+	assert.True(t, result["ws-1"].Idle)
+}
+
+func TestCheckIdleAll_Busy(t *testing.T) {
+	call := 0
+	ws := store.Workspace{
+		ID: "ws-1", Name: "myws", Status: store.StatusActive, TmuxSession: "harness-myws",
+	}
+	cap := &funcCapture{fn: func() string {
+		call++
+		return fmt.Sprintf("line %d\n", call)
+	}}
+	upd := &mockStoreUpdater{data: map[string]store.Workspace{"ws-1": ws}}
+
+	result := checkIdleAll(context.Background(), []store.Workspace{ws}, cap, upd, 5000, 50)
+
+	require.Contains(t, result, "ws-1")
+	assert.False(t, result["ws-1"].Idle)
+}
+
+func TestCheckIdleAll_Empty(t *testing.T) {
+	result := checkIdleAll(context.Background(), nil, &mockPaneCapture{}, &mockStoreUpdater{}, 5000, 50)
+	assert.Empty(t, result)
+}
+
 func TestSanitizeText(t *testing.T) {
 	tests := []struct {
 		input    string
