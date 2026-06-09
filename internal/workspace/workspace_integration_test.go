@@ -119,12 +119,13 @@ func TestIntegration_Reconcile(t *testing.T) {
 	// Kill session directly to simulate an orphan.
 	require.NoError(t, m.tmux.KillSession(ws.TmuxSession))
 
-	// Reconcile should mark it as orphaned in the store (store.Status still exists at this point).
+	// Reconcile is now read-only; it logs discrepancies but does not write to the store.
 	require.NoError(t, m.Reconcile(ctx))
 
-	reloaded, err := m.store.Get(ws.ID)
+	// The store record is unchanged; orphaned status is derived at query time via buildWorkspace.
+	reloaded, err := m.Get(ws.ID)
 	require.NoError(t, err)
-	assert.Equal(t, store.StatusOrphaned, reloaded.Status)
+	assert.Equal(t, StatusOrphaned, reloaded.Status)
 }
 
 func TestIntegration_CapacityLimit(t *testing.T) {

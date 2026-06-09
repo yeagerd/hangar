@@ -263,17 +263,10 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 	for _, ws := range active {
 		sessionName := m.cfg.SessionPrefix + ws.Name
 		if !liveSet[sessionName] {
-			fmt.Fprintf(os.Stderr, "reconcile: workspace %q session %q not found — marking orphaned\n",
+			fmt.Fprintf(os.Stderr, "reconcile: workspace %q session %q not found\n",
 				ws.Name, sessionName)
-			if err := m.store.Update(ws.ID, func(w *store.Workspace) {
-				w.Status = store.StatusOrphaned
-			}); err != nil {
-				fmt.Fprintf(os.Stderr, "reconcile: failed to update %q: %v\n", ws.Name, err)
-			}
-			delete(liveSet, sessionName)
-		} else {
-			delete(liveSet, sessionName)
 		}
+		delete(liveSet, sessionName)
 	}
 
 	// Warn about sessions not in the store.
