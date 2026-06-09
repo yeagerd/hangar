@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yeagerd/hangar/internal/store"
 	"github.com/yeagerd/hangar/internal/workspace"
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
@@ -114,22 +113,18 @@ func (c *mockPaneCapture) CapturePane(_ string, _ int) (string, error) {
 }
 
 type mockStoreUpdater struct {
-	data map[string]store.Workspace
+	calls []struct {
+		id        string
+		hash      string
+	}
 }
 
-func (u *mockStoreUpdater) Update(id string, apply func(*store.Workspace)) error {
-	if ws, ok := u.data[id]; ok {
-		apply(&ws)
-		u.data[id] = ws
-	}
+func (u *mockStoreUpdater) UpdateIdleState(id, hash string, _ time.Time) error {
+	u.calls = append(u.calls, struct {
+		id   string
+		hash string
+	}{id, hash})
 	return nil
-}
-
-func (u *mockStoreUpdater) Get(id string) (store.Workspace, error) {
-	if ws, ok := u.data[id]; ok {
-		return ws, nil
-	}
-	return store.Workspace{}, workspace.ErrNotFound
 }
 
 // ---- helpers ----
@@ -373,13 +368,9 @@ func TestWorkspaceIdle_Idle(t *testing.T) {
 		ID: "ws-1", Name: "myws", Status: workspace.StatusActive, TmuxSession: "harness-myws",
 		LastCaptureHash: h, LastChangedAt: time.Now().Add(-10 * time.Second),
 	}
-	// mockStoreUpdater still uses store.Workspace until Task 7 changes the idle API.
-	wsStore := store.Workspace{
-		ID: "ws-1", LastCaptureHash: h, LastChangedAt: ws.LastChangedAt,
-	}
 	mgr := &mockManager{workspaces: []workspace.Workspace{ws}}
 	cap := &mockPaneCapture{content: content}
-	upd := &mockStoreUpdater{data: map[string]store.Workspace{"ws-1": wsStore}}
+	upd := &mockStoreUpdater{}
 	s := newTestServer(mgr, cap, upd)
 
 	result := callTool(t, s, "workspace_idle", map[string]any{"id": "ws-1"})
@@ -408,12 +399,9 @@ func TestWorkspaceWaitIdle_AlreadyIdle(t *testing.T) {
 		ID: "ws-1", Name: "myws", Status: workspace.StatusActive, TmuxSession: "harness-myws",
 		LastCaptureHash: h, LastChangedAt: time.Now().Add(-10 * time.Second),
 	}
-	wsStore := store.Workspace{
-		ID: "ws-1", LastCaptureHash: h, LastChangedAt: ws.LastChangedAt,
-	}
 	mgr := &mockManager{workspaces: []workspace.Workspace{ws}}
 	cap := &mockPaneCapture{content: content}
-	upd := &mockStoreUpdater{data: map[string]store.Workspace{"ws-1": wsStore}}
+	upd := &mockStoreUpdater{}
 	s := newTestServer(mgr, cap, upd)
 
 	result := callTool(t, s, "workspace_wait_idle", map[string]any{
@@ -443,7 +431,7 @@ func TestWorkspaceWaitIdle_Timeout(t *testing.T) {
 	}}
 
 	mgr := &mockManager{workspaces: []workspace.Workspace{ws}}
-	upd := &mockStoreUpdater{data: map[string]store.Workspace{"ws-1": {}}}
+	upd := &mockStoreUpdater{}
 	s := newTestServer(mgr, capFunc, upd)
 
 	result := callTool(t, s, "workspace_wait_idle", map[string]any{

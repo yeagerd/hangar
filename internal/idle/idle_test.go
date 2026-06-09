@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yeagerd/hangar/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,26 +19,33 @@ func (m *mockCapture) CapturePane(_ string, _ int) (string, error) {
 	return m.content, m.err
 }
 
-// mockUpdater records calls; optionally mutates the workspace in-place (stored externally).
+// mockUpdater records UpdateIdleState calls.
 type mockUpdater struct {
-	applied []func(*store.Workspace)
-	err     error
+	calls []struct {
+		id        string
+		hash      string
+		changedAt time.Time
+	}
+	err error
 }
 
-func (m *mockUpdater) Update(_ string, apply func(*store.Workspace)) error {
+func (m *mockUpdater) UpdateIdleState(id, hash string, changedAt time.Time) error {
 	if m.err != nil {
 		return m.err
 	}
-	m.applied = append(m.applied, apply)
+	m.calls = append(m.calls, struct {
+		id        string
+		hash      string
+		changedAt time.Time
+	}{id, hash, changedAt})
 	return nil
 }
 
-func newWS(lastHash string, lastChanged time.Time) store.Workspace {
-	return store.Workspace{
+func newWS(lastHash string, lastChanged time.Time) WorkspaceState {
+	return WorkspaceState{
 		ID:              "ws-1",
 		Name:            "test",
 		TmuxSession:     "harness-test",
-		Status:          store.StatusActive,
 		LastCaptureHash: lastHash,
 		LastChangedAt:   lastChanged,
 	}
@@ -54,7 +60,7 @@ func TestCheck_FirstCall_AlwaysBusy(t *testing.T) {
 	status, err := Check(context.Background(), ws, cap, upd, 5000)
 	require.NoError(t, err)
 	assert.False(t, status.Idle)
-	assert.Len(t, upd.applied, 1, "update should have been called")
+	assert.Len(t, upd.calls, 1, "UpdateIdleState should have been called")
 }
 
 func TestCheck_HashChanged_Busy(t *testing.T) {
@@ -65,7 +71,7 @@ func TestCheck_HashChanged_Busy(t *testing.T) {
 	status, err := Check(context.Background(), ws, cap, upd, 5000)
 	require.NoError(t, err)
 	assert.False(t, status.Idle)
-	assert.Len(t, upd.applied, 1, "update should have been called on hash change")
+	assert.Len(t, upd.calls, 1, "UpdateIdleState should have been called on hash change")
 }
 
 func TestCheck_HashSame_BelowThreshold_Busy(t *testing.T) {
@@ -79,7 +85,7 @@ func TestCheck_HashSame_BelowThreshold_Busy(t *testing.T) {
 	status, err := Check(context.Background(), ws, cap, upd, 5000)
 	require.NoError(t, err)
 	assert.False(t, status.Idle)
-	assert.Empty(t, upd.applied, "no update expected when hash unchanged")
+	assert.Empty(t, upd.calls, "no update expected when hash unchanged")
 }
 
 func TestCheck_HashSame_AboveThreshold_Idle(t *testing.T) {
@@ -94,7 +100,7 @@ func TestCheck_HashSame_AboveThreshold_Idle(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, status.Idle)
 	assert.Equal(t, int64(5000), status.ThresholdMs)
-	assert.Empty(t, upd.applied)
+	assert.Empty(t, upd.calls)
 }
 
 func TestCheck_CaptureError(t *testing.T) {

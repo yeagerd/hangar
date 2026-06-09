@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/yeagerd/hangar/internal/store"
 )
 
 // IdleStatus is the result of a single idle check.
@@ -20,14 +18,23 @@ type IdleStatus struct {
 	ThresholdMs   int64
 }
 
+// WorkspaceState holds the fields from a workspace that idle detection requires.
+type WorkspaceState struct {
+	ID              string
+	Name            string
+	TmuxSession     string
+	LastCaptureHash string
+	LastChangedAt   time.Time
+}
+
 // PaneCapture abstracts the tmux capture-pane call so tests can inject fakes.
 type PaneCapture interface {
 	CapturePane(sessionName string, lines int) (string, error)
 }
 
-// WorkspaceUpdater abstracts store.Update so tests can inject fakes.
+// WorkspaceUpdater abstracts persisting idle-detection state so tests can inject fakes.
 type WorkspaceUpdater interface {
-	Update(id string, apply func(*store.Workspace)) error
+	UpdateIdleState(id, hash string, changedAt time.Time) error
 }
 
 // Check determines whether the workspace session is idle.
@@ -38,7 +45,7 @@ type WorkspaceUpdater interface {
 //  4. If hash same → compute elapsed; if >= threshold, return idle.
 func Check(
 	ctx context.Context,
-	ws store.Workspace,
+	ws WorkspaceState,
 	capture PaneCapture,
 	updater WorkspaceUpdater,
 	thresholdMs int64,
@@ -52,10 +59,7 @@ func Check(
 
 	if hash != ws.LastCaptureHash {
 		now := time.Now()
-		if err := updater.Update(ws.ID, func(w *store.Workspace) {
-			w.LastCaptureHash = hash
-			w.LastChangedAt = now
-		}); err != nil {
+		if err := updater.UpdateIdleState(ws.ID, hash, now); err != nil {
 			return IdleStatus{}, fmt.Errorf("updating workspace hash: %w", err)
 		}
 		return IdleStatus{
@@ -82,7 +86,7 @@ func Check(
 // Returns a non-nil error (wrapping context.DeadlineExceeded) on timeout or ctx cancellation.
 func WaitUntilIdle(
 	ctx context.Context,
-	ws store.Workspace,
+	ws WorkspaceState,
 	capture PaneCapture,
 	updater WorkspaceUpdater,
 	thresholdMs, timeoutMs, pollIntervalMs int64,
@@ -118,10 +122,7 @@ func WaitUntilIdle(
 			hash := hashContent(content)
 			if hash != ws.LastCaptureHash {
 				now := time.Now()
-				if err := updater.Update(ws.ID, func(w *store.Workspace) {
-					w.LastCaptureHash = hash
-					w.LastChangedAt = now
-				}); err != nil {
+				if err := updater.UpdateIdleState(ws.ID, hash, now); err != nil {
 					return IdleStatus{}, fmt.Errorf("updating workspace hash: %w", err)
 				}
 				ws.LastCaptureHash = hash
@@ -163,7 +164,7 @@ func looksIdle(content, promptSuffix string) bool {
 // tiebreaker when elapsed is between 80% and 100% of the threshold.
 func CheckWithPromptHeuristic(
 	ctx context.Context,
-	ws store.Workspace,
+	ws WorkspaceState,
 	capture PaneCapture,
 	updater WorkspaceUpdater,
 	thresholdMs int64,
@@ -178,10 +179,7 @@ func CheckWithPromptHeuristic(
 
 	if hash != ws.LastCaptureHash {
 		now := time.Now()
-		if err := updater.Update(ws.ID, func(w *store.Workspace) {
-			w.LastCaptureHash = hash
-			w.LastChangedAt = now
-		}); err != nil {
+		if err := updater.UpdateIdleState(ws.ID, hash, now); err != nil {
 			return IdleStatus{}, fmt.Errorf("updating workspace hash: %w", err)
 		}
 		return IdleStatus{Idle: false, LastChangedAt: now, ElapsedMs: 0, ThresholdMs: thresholdMs}, nil

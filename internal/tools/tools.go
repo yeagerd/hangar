@@ -14,7 +14,6 @@ import (
 	"unicode"
 
 	"github.com/yeagerd/hangar/internal/idle"
-	"github.com/yeagerd/hangar/internal/store"
 	"github.com/yeagerd/hangar/internal/workspace"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -38,8 +37,7 @@ type PaneCapture interface {
 
 // StoreUpdater is the interface for the idle checker to update workspace state.
 type StoreUpdater interface {
-	Update(id string, apply func(*store.Workspace)) error
-	Get(id string) (store.Workspace, error)
+	UpdateIdleState(id, hash string, changedAt time.Time) error
 }
 
 // rateLimiter tracks the last send time per workspace ID.
@@ -478,12 +476,11 @@ func Register(s *server.MCPServer, mgr Manager, capture PaneCapture, storeUpd St
 			return mcp.NewToolResultError(fmt.Sprintf("workspace not found: %s", id)), nil
 		}
 
-		// Bridge to store.Workspace until idle package is updated in a later task.
-		swIdle := store.Workspace{
+		wsState := idle.WorkspaceState{
 			ID: ws.ID, Name: ws.Name, TmuxSession: ws.TmuxSession,
 			LastCaptureHash: ws.LastCaptureHash, LastChangedAt: ws.LastChangedAt,
 		}
-		status, err := idle.Check(ctx, swIdle, capture, storeUpd, threshold)
+		status, err := idle.Check(ctx, wsState, capture, storeUpd, threshold)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "workspace_idle: check error: %v\n", err)
 			return mcp.NewToolResultError(fmt.Sprintf("idle check failed: %v", err)), nil
@@ -532,12 +529,11 @@ func Register(s *server.MCPServer, mgr Manager, capture PaneCapture, storeUpd St
 			), nil
 		}
 
-		// Bridge to store.Workspace until idle package is updated in a later task.
-		swIdle := store.Workspace{
+		wsState := idle.WorkspaceState{
 			ID: ws.ID, Name: ws.Name, TmuxSession: ws.TmuxSession,
 			LastCaptureHash: ws.LastCaptureHash, LastChangedAt: ws.LastChangedAt,
 		}
-		status, waitErr := idle.WaitUntilIdle(ctx, swIdle, capture, storeUpd, threshold, int64(timeoutMs), int64(pollIntervalMs))
+		status, waitErr := idle.WaitUntilIdle(ctx, wsState, capture, storeUpd, threshold, int64(timeoutMs), int64(pollIntervalMs))
 		timedOut := waitErr != nil
 		if waitErr != nil && !errors.Is(waitErr, context.DeadlineExceeded) && !errors.Is(waitErr, context.Canceled) {
 			fmt.Fprintf(os.Stderr, "workspace_wait_idle: error: %v\n", waitErr)
