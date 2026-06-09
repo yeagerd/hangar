@@ -10,9 +10,7 @@ import (
 
 func cmdList(opts globalOpts, args []string) error {
 	fs := flag.NewFlagSet("harness-client list", flag.ContinueOnError)
-	var includeArchived bool
 	var repo string
-	fs.BoolVar(&includeArchived, "include-archived", false, "include archived and orphaned workspaces")
 	fs.StringVar(&repo, "repo", "", "filter by repo alias")
 
 	if err := fs.Parse(args); err != nil {
@@ -28,9 +26,6 @@ func cmdList(opts globalOpts, args []string) error {
 	defer cleanup()
 
 	toolArgs := map[string]any{}
-	if includeArchived {
-		toolArgs["include_archived"] = true
-	}
 	if repo != "" {
 		toolArgs["repo"] = repo
 	}

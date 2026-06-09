@@ -21,9 +21,8 @@ import (
 // Manager is the interface the tool handlers use to access workspace operations.
 type Manager interface {
 	Create(ctx context.Context, opts workspace.CreateOptions) (workspace.Workspace, error)
-	Archive(ctx context.Context, id string) (workspace.Workspace, error)
 	Delete(ctx context.Context, id string, confirmed bool, force bool) error
-	List(includeArchived bool) []workspace.Workspace
+	List() []workspace.Workspace
 	Get(id string) (workspace.Workspace, error)
 	Resolve(input string) (workspace.Workspace, error)
 	SendKeys(id string, text string, pressEnter bool) error
@@ -66,14 +65,13 @@ func (r *rateLimiter) check(id string) (retryAfterMs int64, ok bool) {
 
 // workspaceSummary is the JSON shape for list output.
 type workspaceSummary struct {
-	ID           string                    `json:"id"`
-	Name         string                    `json:"name"`
-	Status       workspace.WorkspaceStatus `json:"status"`
-	Branch       string                    `json:"branch"`
-	TmuxSession  string                    `json:"tmuxSession"`
-	CreatedAt    time.Time                 `json:"createdAt"`
-	WorktreePath string                    `json:"worktreePath"`
-	// Idle status is populated for active workspaces.
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	Branch       string    `json:"branch"`
+	TmuxSession  string    `json:"tmuxSession"`
+	CreatedAt    time.Time `json:"createdAt"`
+	WorktreePath string    `json:"worktreePath"`
+	// Idle status is populated for all workspaces in the list.
 	IdleStatus *bool `json:"idleStatus,omitempty"`
 }
 
@@ -81,7 +79,6 @@ func toSummary(ws workspace.Workspace) workspaceSummary {
 	return workspaceSummary{
 		ID:           ws.ID,
 		Name:         ws.Name,
-		Status:       ws.Status,
 		Branch:       ws.Branch,
 		TmuxSession:  ws.TmuxSession,
 		CreatedAt:    ws.CreatedAt,
@@ -149,21 +146,17 @@ func Register(s *server.MCPServer, mgr Manager, capture PaneCapture, storeUpd St
 
 	// workspace_list
 	s.AddTool(mcp.NewTool("workspace_list",
-		mcp.WithDescription("List all workspaces. By default excludes archived ones."),
-		mcp.WithBoolean("include_archived",
-			mcp.Description("Include archived and orphaned workspaces"),
-		),
+		mcp.WithDescription("List all workspaces."),
 		mcp.WithBoolean("wait_any_idle",
-			mcp.Description("Block until at least one active workspace is idle, then return the list"),
+			mcp.Description("Block until at least one workspace is idle, then return the list"),
 		),
 		mcp.WithBoolean("wait_all_idle",
-			mcp.Description("Block until all active workspaces are idle, then return the list"),
+			mcp.Description("Block until all workspaces are idle, then return the list"),
 		),
 		mcp.WithNumber("timeout_ms",
 			mcp.Description("Maximum wait in milliseconds when a wait flag is set (default 600000 = 10 min)"),
 		),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		includeArchived := req.GetBool("include_archived", false)
 		waitAny := req.GetBool("wait_any_idle", false)
 		waitAll := req.GetBool("wait_all_idle", false)
 		timeoutMs := int64(req.GetFloat("timeout_ms", 600_000))
@@ -172,16 +165,14 @@ func Register(s *server.MCPServer, mgr Manager, capture PaneCapture, storeUpd St
 			return mcp.NewToolResultError("wait_any_idle and wait_all_idle are mutually exclusive"), nil
 		}
 
-		workspaces := mgr.List(includeArchived)
+		workspaces := mgr.List()
 
 		wsStates := make([]idle.WorkspaceState, 0, len(workspaces))
 		for _, ws := range workspaces {
-			if ws.Status == workspace.StatusActive {
-				wsStates = append(wsStates, idle.WorkspaceState{
-					ID: ws.ID, Name: ws.Name, TmuxSession: ws.TmuxSession,
-					LastCaptureHash: ws.LastCaptureHash, LastChangedAt: ws.LastChangedAt,
-				})
-			}
+			wsStates = append(wsStates, idle.WorkspaceState{
+				ID: ws.ID, Name: ws.Name, TmuxSession: ws.TmuxSession,
+				LastCaptureHash: ws.LastCaptureHash, LastChangedAt: ws.LastChangedAt,
+			})
 		}
 
 		if waitAny || waitAll {
@@ -252,29 +243,6 @@ func Register(s *server.MCPServer, mgr Manager, capture PaneCapture, storeUpd St
 		return jsonText(ws)
 	})
 
-	// workspace_archive
-	s.AddTool(mcp.NewTool("workspace_archive",
-		mcp.WithDescription("Gracefully shut down a workspace. Quits Claude Code, removes the worktree, retains the git branch."),
-		mcp.WithString("id",
-			mcp.Required(),
-			mcp.Description("Workspace ID, name, or unique prefix of either"),
-		),
-	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		id, err := req.RequireString("id")
-		if err != nil {
-			return mcp.NewToolResultError("id is required"), nil
-		}
-		resolved, err := mgr.Resolve(id)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-		ws, err := mgr.Archive(ctx, resolved.ID)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-		return jsonText(ws)
-	})
-
 	// workspace_delete
 	s.AddTool(mcp.NewTool("workspace_delete",
 		mcp.WithDescription("Permanently delete a workspace and its git branch. Destructive and irreversible."),
@@ -335,11 +303,6 @@ func Register(s *server.MCPServer, mgr Manager, capture PaneCapture, storeUpd St
 		ws, err := mgr.Resolve(id)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("workspace not found: %s", id)), nil
-		}
-		if ws.Status != workspace.StatusActive {
-			return mcp.NewToolResultError(
-				fmt.Sprintf("workspace %s is not active (status: %s)", id, ws.Status),
-			), nil
 		}
 
 		// Reject text with ASCII control characters (except \n and \t).
@@ -449,11 +412,6 @@ func Register(s *server.MCPServer, mgr Manager, capture PaneCapture, storeUpd St
 			ws, err := mgr.Resolve(id)
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("workspace not found: %s", id)), nil
-			}
-			if ws.Status != workspace.StatusActive {
-				return mcp.NewToolResultError(
-					fmt.Sprintf("workspace %s is not active (status: %s)", id, ws.Status),
-				), nil
 			}
 			wsStates = append(wsStates, idle.WorkspaceState{
 				ID: ws.ID, Name: ws.Name, TmuxSession: ws.TmuxSession,

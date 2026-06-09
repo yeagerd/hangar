@@ -6,10 +6,10 @@ import (
 )
 
 // Resolve returns the single workspace matching input by exact ID, exact name, ID prefix,
-// or name prefix. All workspaces including archived are searched.
-// Returns ErrNotFound if no workspace matches, ErrAmbiguous if more than one matches.
+// or name prefix. Returns ErrNotFound if no workspace matches, ErrAmbiguous if more than
+// one matches.
 func (m *Manager) Resolve(input string) (Workspace, error) {
-	all := m.store.List(true)
+	all := m.store.List()
 
 	var ids []string
 	seen := make(map[string]bool)

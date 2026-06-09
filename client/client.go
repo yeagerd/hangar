@@ -71,8 +71,6 @@ func Execute(args []string) error {
 		return cmdList(opts, subArgs)
 	case "create":
 		return cmdCreate(opts, subArgs)
-	case "archive":
-		return cmdArchive(opts, subArgs)
 	case "delete":
 		return cmdDelete(opts, subArgs)
 	case "send":
@@ -108,7 +106,6 @@ func printUsage() {
 Subcommands:
   list          List all workspaces
   create        Create a new workspace
-  archive       Archive a workspace
   delete        Permanently delete a workspace
   send          Send text to a workspace session
   read          Read terminal output from a workspace

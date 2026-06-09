@@ -149,7 +149,7 @@ func main() {
 	}
 	toolList, _ := toolsResult["tools"].([]any)
 	expectedTools := []string{
-		"workspace_list", "workspace_create", "workspace_archive",
+		"workspace_list", "workspace_create",
 		"workspace_delete", "workspace_send", "workspace_read",
 		"workspace_idle", "workspace_wait_idle", "workspace_attach_hint",
 	}
@@ -203,10 +203,10 @@ func main() {
 
 	// Clean up on exit.
 	defer func() {
-		logf("archiving smoke-ws")
-		_, err := callTool(rpc, "workspace_archive", map[string]any{"id": wsID})
+		logf("deleting smoke-ws")
+		_, err := callTool(rpc, "workspace_delete", map[string]any{"id": wsID, "confirm": true})
 		if err != nil {
-			logf("archive error (ignored): %v", err)
+			logf("delete error (ignored): %v", err)
 		}
 	}()
 

@@ -11,7 +11,6 @@ import (
 type workspaceSummary struct {
 	ID           string    `json:"id"`
 	Name         string    `json:"name"`
-	Status       string    `json:"status"`
 	Branch       string    `json:"branch"`
 	TmuxSession  string    `json:"tmuxSession"`
 	CreatedAt    time.Time `json:"createdAt"`
@@ -35,7 +34,6 @@ func (ew *errWriter) printf(format string, args ...any) {
 const (
 	colIDWidth     = 8
 	colNameWidth   = 16
-	colStatusWidth = 8
 	colBranchWidth = 16
 	colRepoWidth   = 8
 )
@@ -52,10 +50,9 @@ func truncate(s string, maxLen int) string {
 // printTable renders a fixed-width table of workspaces.
 func printTable(ws []workspaceSummary, w io.Writer) {
 	ew := &errWriter{w: w}
-	ew.printf("%-*s  %-*s  %-*s  %-*s  %-*s  %s\n",
+	ew.printf("%-*s  %-*s  %-*s  %-*s  %s\n",
 		colIDWidth, "ID",
 		colNameWidth, "NAME",
-		colStatusWidth, "STATUS",
 		colBranchWidth, "BRANCH",
 		colRepoWidth, "REPO",
 		"CREATED",
@@ -73,10 +70,9 @@ func printTable(ws []workspaceSummary, w io.Writer) {
 		if len(id) > colIDWidth {
 			id = id[:colIDWidth]
 		}
-		ew.printf("%-*s  %-*s  %-*s  %-*s  %-*s  %s\n",
+		ew.printf("%-*s  %-*s  %-*s  %-*s  %s\n",
 			colIDWidth, id,
 			colNameWidth, truncate(s.Name, colNameWidth),
-			colStatusWidth, truncate(s.Status, colStatusWidth),
 			colBranchWidth, truncate(s.Branch, colBranchWidth),
 			colRepoWidth, truncate(repo, colRepoWidth),
 			created,
@@ -89,7 +85,6 @@ func printWorkspace(ws workspaceSummary, w io.Writer) {
 	ew := &errWriter{w: w}
 	ew.printf("id:       %s\n", ws.ID)
 	ew.printf("name:     %s\n", ws.Name)
-	ew.printf("status:   %s\n", ws.Status)
 	ew.printf("branch:   %s\n", ws.Branch)
 	ew.printf("session:  %s\n", ws.TmuxSession)
 	ew.printf("worktree: %s\n", ws.WorktreePath)

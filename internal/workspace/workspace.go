@@ -59,7 +59,7 @@ func (m *Manager) Create(ctx context.Context, opts CreateOptions) (Workspace, er
 	}
 
 	// Name conflict check.
-	existing := m.store.List(false)
+	existing := m.store.List()
 	for _, ws := range existing {
 		if ws.Name == opts.Name {
 			return Workspace{}, fmt.Errorf("%w: %s", ErrInvalidName, opts.Name+" already exists")
@@ -101,8 +101,8 @@ func (m *Manager) Create(ctx context.Context, opts CreateOptions) (Workspace, er
 		return Workspace{}, fmt.Errorf("launching claude: %w", err)
 	}
 
-	// Step 4: register in store. TmuxSession, WorktreePath, and Status are derived
-	// at query time and not persisted.
+	// Step 4: register in store. TmuxSession and WorktreePath are derived at query time
+	// and not persisted.
 	now := time.Now()
 	sw := store.Workspace{
 		Name:          opts.Name,
@@ -125,19 +125,43 @@ func (m *Manager) Create(ctx context.Context, opts CreateOptions) (Workspace, er
 	return m.buildWorkspace(created), nil
 }
 
-// Archive gracefully shuts down a workspace: exits Claude, removes the worktree,
-// retains the git branch, and sets status to archived.
-func (m *Manager) Archive(ctx context.Context, id string) (Workspace, error) {
+// Delete kills the workspace: exits the Claude session, removes the worktree,
+// deletes the git branch, and removes the store entry.
+// confirmed must be true — if false, returns ErrDeleteNotConfirmed without doing anything.
+// If force is false, Delete refuses to proceed when the worktree has uncommitted changes
+// or unpushed commits.
+//
+// WARNING: This is the only operation that deletes a git branch. It cannot be undone.
+func (m *Manager) Delete(ctx context.Context, id string, confirmed bool, force bool) error {
+	if !confirmed {
+		return ErrDeleteNotConfirmed
+	}
+
 	sw, err := m.store.Get(id)
 	if err != nil {
-		return Workspace{}, fmt.Errorf("%w: %s", ErrNotFound, id)
+		return fmt.Errorf("%w: %s", ErrNotFound, id)
 	}
-	if sw.ArchivedAt != nil {
-		return Workspace{}, fmt.Errorf("%w: %s", ErrAlreadyArchived, sw.Name)
+
+	worktreePath := filepath.Join(m.cfg.WorktreeRoot, sw.Name)
+
+	if !force {
+		dirty, unpushed, checkErr := m.worktree.CheckClean(worktreePath, sw.Branch)
+		if checkErr != nil {
+			return fmt.Errorf("checking workspace cleanliness: %w", checkErr)
+		}
+		if dirty || unpushed {
+			var reasons []string
+			if dirty {
+				reasons = append(reasons, "workspace has uncommitted changes; commit or stash them, or pass force=true to delete anyway")
+			}
+			if unpushed {
+				reasons = append(reasons, "workspace branch has unpushed commits; push them or pass force=true to delete anyway")
+			}
+			return errors.New(strings.Join(reasons, "; "))
+		}
 	}
 
 	sessionName := m.cfg.SessionPrefix + sw.Name
-	worktreePath := filepath.Join(m.cfg.WorktreeRoot, sw.Name)
 
 	// Ask Claude to exit gracefully.
 	_ = m.tmux.SendKeys(sessionName, "exit", true)
@@ -161,71 +185,9 @@ func (m *Manager) Archive(ctx context.Context, id string) (Workspace, error) {
 		_ = m.worktree.Remove(worktreePath, true)
 	}
 
-	// Update store.
-	now := time.Now()
-	if err := m.store.Update(id, func(w *store.Workspace) {
-		w.ArchivedAt = &now
-	}); err != nil {
-		return Workspace{}, fmt.Errorf("updating store: %w", err)
-	}
-
-	reloaded, err := m.store.Get(id)
-	if err != nil {
-		return Workspace{}, fmt.Errorf("reloading workspace after archive: %w", err)
-	}
-	return m.buildWorkspace(reloaded), nil
-}
-
-// Delete archives the workspace and also deletes the git branch.
-// confirmed must be true — if false, returns ErrDeleteNotConfirmed without doing anything.
-// If force is false, Delete refuses to proceed when the worktree has uncommitted changes
-// or unpushed commits.
-//
-// WARNING: This is the only operation that deletes a git branch. It cannot be undone.
-func (m *Manager) Delete(ctx context.Context, id string, confirmed bool, force bool) error {
-	if !confirmed {
-		return ErrDeleteNotConfirmed
-	}
-
-	sw, err := m.store.Get(id)
-	if err != nil {
-		return fmt.Errorf("%w: %s", ErrNotFound, id)
-	}
-
-	if sw.ArchivedAt == nil {
-		if !force {
-			worktreePath := filepath.Join(m.cfg.WorktreeRoot, sw.Name)
-			dirty, unpushed, checkErr := m.worktree.CheckClean(worktreePath, sw.Branch)
-			if checkErr != nil {
-				return fmt.Errorf("checking workspace cleanliness: %w", checkErr)
-			}
-			if dirty || unpushed {
-				var reasons []string
-				if dirty {
-					reasons = append(reasons, "workspace has uncommitted changes; commit or stash them, or pass force=true to delete anyway")
-				}
-				if unpushed {
-					reasons = append(reasons, "workspace branch has unpushed commits; push them or pass force=true to delete anyway")
-				}
-				return errors.New(strings.Join(reasons, "; "))
-			}
-		}
-
-		// Archive first (exits session, removes worktree).
-		if _, err := m.Archive(ctx, id); err != nil {
-			return fmt.Errorf("archiving before delete: %w", err)
-		}
-		// Re-fetch after archive.
-		sw, err = m.store.Get(id)
-		if err != nil {
-			return fmt.Errorf("re-fetching workspace: %w", err)
-		}
-	}
-
-	// Delete the git branch. Branch is retained in the store record.
+	// Delete the git branch.
 	out, err := exec.Command("git", "-C", m.cfg.RepoPath, "branch", "-d", sw.Branch).Output() //nolint:gosec
 	if err != nil {
-		// Try force-delete.
 		out2, err2 := exec.Command("git", "-C", m.cfg.RepoPath, "branch", "-D", sw.Branch).Output() //nolint:gosec
 		if err2 != nil {
 			fmt.Fprintf(os.Stderr, "failed to delete branch %q: %v (output: %s %s)\n",
@@ -236,9 +198,9 @@ func (m *Manager) Delete(ctx context.Context, id string, confirmed bool, force b
 	return m.store.Delete(id)
 }
 
-// List returns workspaces. If includeArchived is false, only non-archived workspaces are returned.
-func (m *Manager) List(includeArchived bool) []Workspace {
-	records := m.store.List(includeArchived)
+// List returns all workspaces.
+func (m *Manager) List() []Workspace {
+	records := m.store.List()
 	result := make([]Workspace, len(records))
 	for i, sw := range records {
 		result[i] = m.buildWorkspace(sw)
@@ -274,10 +236,10 @@ func (m *Manager) SendKeys(id string, text string, pressEnter bool) error {
 	return m.tmux.SendKeys(sessionName, text, pressEnter)
 }
 
-// Reconcile checks all active workspaces against live tmux sessions and marks missing
-// ones as orphaned. Called once at startup.
+// Reconcile checks all workspaces against live tmux sessions and logs discrepancies.
+// Called once at startup.
 func (m *Manager) Reconcile(ctx context.Context) error {
-	active := m.store.List(false)
+	all := m.store.List()
 
 	liveSessions, err := m.tmux.ListSessions(m.cfg.SessionPrefix)
 	if err != nil {
@@ -289,8 +251,7 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 		liveSet[s] = true
 	}
 
-	// Check active workspaces against live sessions.
-	for _, ws := range active {
+	for _, ws := range all {
 		sessionName := m.cfg.SessionPrefix + ws.Name
 		if !liveSet[sessionName] {
 			fmt.Fprintf(os.Stderr, "reconcile: workspace %q session %q not found\n",
@@ -299,7 +260,6 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 		delete(liveSet, sessionName)
 	}
 
-	// Warn about sessions not in the store.
 	for session := range liveSet {
 		fmt.Fprintf(os.Stderr, "reconcile: tmux session %q has no store entry — possibly created manually\n", session)
 	}
@@ -308,22 +268,15 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 }
 
 // buildWorkspace constructs a Workspace from a store record by deriving
-// WorktreePath, TmuxSession, Branch, and Status at call time from config, git, and tmux.
+// WorktreePath, TmuxSession, and Branch at call time from config and git.
 func (m *Manager) buildWorkspace(sw store.Workspace) Workspace {
 	ws := Workspace{
 		ID:              sw.ID,
 		Name:            sw.Name,
 		CreatedAt:       sw.CreatedAt,
-		ArchivedAt:      sw.ArchivedAt,
 		LastCaptureHash: sw.LastCaptureHash,
 		LastChangedAt:   sw.LastChangedAt,
 		Meta:            sw.Meta,
-	}
-
-	if sw.ArchivedAt != nil {
-		ws.Status = StatusArchived
-		ws.Branch = sw.Branch
-		return ws
 	}
 
 	ws.WorktreePath = filepath.Join(m.cfg.WorktreeRoot, sw.Name)
@@ -333,13 +286,6 @@ func (m *Manager) buildWorkspace(sw store.Workspace) Workspace {
 		ws.Branch = info.Branch
 	} else {
 		ws.Branch = sw.Branch
-	}
-
-	alive, err := m.tmux.SessionExists(m.cfg.SessionPrefix, sw.Name)
-	if err != nil || !alive {
-		ws.Status = StatusOrphaned
-	} else {
-		ws.Status = StatusActive
 	}
 
 	return ws

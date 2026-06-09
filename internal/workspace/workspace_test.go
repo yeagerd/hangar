@@ -22,9 +22,9 @@ type mockWorktree struct {
 	checkErr error
 }
 
-func (m *mockWorktree) Add(_, _ string, _ bool) error                      { return nil }
-func (m *mockWorktree) Remove(_ string, _ bool) error                      { return nil }
-func (m *mockWorktree) FindByPath(_ string) (worktree.WorktreeInfo, bool)  { return worktree.WorktreeInfo{}, false }
+func (m *mockWorktree) Add(_, _ string, _ bool) error                     { return nil }
+func (m *mockWorktree) Remove(_ string, _ bool) error                     { return nil }
+func (m *mockWorktree) FindByPath(_ string) (worktree.WorktreeInfo, bool) { return worktree.WorktreeInfo{}, false }
 func (m *mockWorktree) CheckClean(_, _ string) (bool, bool, error) {
 	return m.dirty, m.unpushed, m.checkErr
 }
@@ -94,38 +94,14 @@ func TestDelete_BothDirtyAndUnpushed(t *testing.T) {
 }
 
 func TestDelete_ForceSkipsSafetyCheck(t *testing.T) {
-	// dirty=true but force=true — safety check is bypassed; error will come from archive
-	// (no real tmux/git), but it must NOT be a safety-check error.
+	// dirty=true but force=true — safety check is bypassed; error will come from tmux/git
+	// (no real environment), but it must NOT be a safety-check error.
 	wt := &mockWorktree{dirty: true, unpushed: true}
 	m := makeDeleteManager(t, wt)
 	id := addWS(t, m, "ws1", "ws1")
 	err := m.Delete(context.Background(), id, true, true)
-	// The archive step will fail (no tmux), but the error is not a safety-check error.
 	if err != nil {
 		assert.False(t, strings.Contains(err.Error(), "uncommitted changes"), "got safety-check error with force=true: %s", err)
 		assert.False(t, strings.Contains(err.Error(), "unpushed commits"), "got safety-check error with force=true: %s", err)
-	}
-}
-
-func TestDelete_AlreadyArchivedSkipsSafetyCheck(t *testing.T) {
-	// When a workspace is already archived, CheckClean is never called.
-	wt := &mockWorktree{dirty: true, unpushed: true}
-	m := makeDeleteManager(t, wt)
-
-	// Insert an already-archived record directly.
-	now := time.Now()
-	sw := store.Workspace{
-		Name: "ws1", Branch: "ws1",
-		CreatedAt: now, LastChangedAt: now, ArchivedAt: &now,
-	}
-	require.NoError(t, m.store.Add(sw))
-	reloaded, err := m.store.GetByName("ws1")
-	require.NoError(t, err)
-
-	deleteErr := m.Delete(context.Background(), reloaded.ID, true, false)
-	// Error may come from the git branch deletion (no real repo), but not a safety error.
-	if deleteErr != nil {
-		assert.False(t, strings.Contains(deleteErr.Error(), "uncommitted changes"), "got: %s", deleteErr)
-		assert.False(t, strings.Contains(deleteErr.Error(), "unpushed commits"), "got: %s", deleteErr)
 	}
 }

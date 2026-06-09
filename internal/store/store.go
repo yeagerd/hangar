@@ -14,15 +14,14 @@ import (
 )
 
 // Workspace is a single registry entry.
-// TmuxSession, WorktreePath, and Status are no longer persisted; they are derived at query
-// time by workspace.Manager.buildWorkspace. Old JSON files containing those keys load
-// without error — json.Unmarshal silently ignores unknown fields.
+// TmuxSession, WorktreePath are derived at query time by workspace.Manager.buildWorkspace.
+// Old JSON files containing those keys load without error — json.Unmarshal silently ignores
+// unknown fields.
 type Workspace struct {
 	ID              string            `json:"id"`
 	Name            string            `json:"name"`
 	Branch          string            `json:"branch"`
 	CreatedAt       time.Time         `json:"createdAt"`
-	ArchivedAt      *time.Time        `json:"archivedAt,omitempty"`
 	LastCaptureHash string            `json:"lastCaptureHash"`
 	LastChangedAt   time.Time         `json:"lastChangedAt"`
 	Meta            map[string]string `json:"meta,omitempty"`
@@ -31,8 +30,8 @@ type Workspace struct {
 // ErrNotFound is returned when a lookup by ID or name yields no result.
 var ErrNotFound = errors.New("workspace not found")
 
-// ErrNameConflict is returned when adding a workspace whose name already exists and is not archived.
-var ErrNameConflict = errors.New("active workspace with that name already exists")
+// ErrNameConflict is returned when adding a workspace whose name already exists.
+var ErrNameConflict = errors.New("workspace with that name already exists")
 
 // Store is a concurrency-safe registry backed by a JSON file.
 type Store struct {
@@ -63,7 +62,7 @@ func NewStore(path string) (*Store, error) {
 	return s, nil
 }
 
-// Add inserts a new workspace. Rejects if a non-archived workspace with the same name exists.
+// Add inserts a new workspace. Rejects if a workspace with the same name already exists.
 // The workspace ID is generated here if it is empty.
 func (s *Store) Add(ws Workspace) error {
 	if ws.ID == "" {
@@ -74,7 +73,7 @@ func (s *Store) Add(ws Workspace) error {
 	defer s.mu.Unlock()
 
 	for _, existing := range s.data {
-		if existing.Name == ws.Name && existing.ArchivedAt == nil {
+		if existing.Name == ws.Name {
 			return fmt.Errorf("%w: %s", ErrNameConflict, ws.Name)
 		}
 	}
@@ -96,40 +95,26 @@ func (s *Store) Get(id string) (Workspace, error) {
 	return Workspace{}, fmt.Errorf("%w: id=%s", ErrNotFound, id)
 }
 
-// GetByName returns a workspace by name (first non-archived match, then any match).
+// GetByName returns a workspace by name.
 func (s *Store) GetByName(name string) (Workspace, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	var fallback *Workspace
-	for i := range s.data {
-		if s.data[i].Name == name {
-			if s.data[i].ArchivedAt == nil {
-				return s.data[i], nil
-			}
-			if fallback == nil {
-				fallback = &s.data[i]
-			}
+	for _, ws := range s.data {
+		if ws.Name == name {
+			return ws, nil
 		}
-	}
-	if fallback != nil {
-		return *fallback, nil
 	}
 	return Workspace{}, fmt.Errorf("%w: name=%s", ErrNotFound, name)
 }
 
-// List returns all workspaces. If includeArchived is false, archived workspaces are excluded.
-func (s *Store) List(includeArchived bool) []Workspace {
+// List returns all workspaces.
+func (s *Store) List() []Workspace {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	result := make([]Workspace, 0, len(s.data))
-	for _, ws := range s.data {
-		if !includeArchived && ws.ArchivedAt != nil {
-			continue
-		}
-		result = append(result, ws)
-	}
+	result := make([]Workspace, len(s.data))
+	copy(result, s.data)
 	return result
 }
 
@@ -148,7 +133,6 @@ func (s *Store) Update(id string, apply func(*Workspace)) error {
 }
 
 // Delete hard-deletes a workspace by ID from the JSON file.
-// Normal lifecycle changes should set ArchivedAt via Update instead.
 func (s *Store) Delete(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

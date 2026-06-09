@@ -17,7 +17,7 @@ func TestPrintTable_Empty(t *testing.T) {
 	// Header should still be printed.
 	assert.Contains(t, out, "ID")
 	assert.Contains(t, out, "NAME")
-	assert.Contains(t, out, "STATUS")
+	assert.Contains(t, out, "BRANCH")
 }
 
 func TestPrintTable_SingleEntry(t *testing.T) {
@@ -26,7 +26,6 @@ func TestPrintTable_SingleEntry(t *testing.T) {
 		{
 			ID:        "8e9691bc-0c72-4942-aba1-b301fef763e4",
 			Name:      "my-workspace",
-			Status:    "active",
 			Branch:    "feature-branch",
 			RepoAlias: "default",
 			CreatedAt: time.Date(2026, 6, 5, 13, 41, 0, 0, time.UTC),
@@ -36,7 +35,6 @@ func TestPrintTable_SingleEntry(t *testing.T) {
 	out := buf.String()
 	assert.Contains(t, out, "8e9691bc")
 	assert.Contains(t, out, "my-workspace")
-	assert.Contains(t, out, "active")
 	assert.Contains(t, out, "feature-branch")
 	assert.Contains(t, out, "default")
 }
@@ -45,9 +43,8 @@ func TestPrintTable_LongNameTruncation(t *testing.T) {
 	var buf bytes.Buffer
 	ws := []workspaceSummary{
 		{
-			ID:     "abcdef01-1234-5678-9abc-def012345678",
-			Name:   "this-is-a-very-long-workspace-name-that-exceeds-the-column-width",
-			Status: "active",
+			ID:   "abcdef01-1234-5678-9abc-def012345678",
+			Name: "this-is-a-very-long-workspace-name-that-exceeds-the-column-width",
 		},
 	}
 	printTable(ws, &buf)
@@ -58,27 +55,11 @@ func TestPrintTable_LongNameTruncation(t *testing.T) {
 	assert.NotContains(t, out, "this-is-a-very-long-workspace-name-that-exceeds-the-column-width")
 }
 
-func TestPrintTable_ArchivedWorkspace(t *testing.T) {
-	var buf bytes.Buffer
-	ws := []workspaceSummary{
-		{
-			ID:     "deadbeef-0000-0000-0000-000000000000",
-			Name:   "old-workspace",
-			Status: "archived",
-		},
-	}
-	printTable(ws, &buf)
-	out := buf.String()
-	assert.Contains(t, out, "archived")
-	assert.Contains(t, out, "old-workspace")
-}
-
 func TestPrintWorkspace(t *testing.T) {
 	var buf bytes.Buffer
 	ws := workspaceSummary{
 		ID:           "8e9691bc-0c72-4942-aba1-b301fef763e4",
 		Name:         "multi-repo-support",
-		Status:       "active",
 		Branch:       "multi-repo-support",
 		TmuxSession:  "harness-multi-repo-support",
 		WorktreePath: "/Users/yeagerd/github/articulant/worktrees/multi-repo-support",
@@ -90,8 +71,6 @@ func TestPrintWorkspace(t *testing.T) {
 	require.Contains(t, out, ws.ID)
 	require.Contains(t, out, "name:")
 	require.Contains(t, out, ws.Name)
-	require.Contains(t, out, "status:")
-	require.Contains(t, out, ws.Status)
 	require.Contains(t, out, "branch:")
 	require.Contains(t, out, ws.Branch)
 	require.Contains(t, out, "session:")
@@ -111,7 +90,7 @@ func TestTruncate(t *testing.T) {
 func TestPrintTable_NoRepo(t *testing.T) {
 	var buf bytes.Buffer
 	ws := []workspaceSummary{
-		{ID: "aabbccdd", Name: "test", Status: "active"},
+		{ID: "aabbccdd", Name: "test"},
 	}
 	printTable(ws, &buf)
 	out := buf.String()

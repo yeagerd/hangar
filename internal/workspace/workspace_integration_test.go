@@ -68,7 +68,7 @@ func setupManager(t *testing.T, repoPath string) *Manager {
 	return New(tmux.New(), worktree.New(repoPath), s, cfg)
 }
 
-func TestIntegration_CreateAndArchive(t *testing.T) {
+func TestIntegration_CreateAndDelete(t *testing.T) {
 	skipIfNoIntegration(t)
 
 	repoPath := setupTestRepo(t)
@@ -78,10 +78,10 @@ func TestIntegration_CreateAndArchive(t *testing.T) {
 	ws, err := m.Create(ctx, CreateOptions{Name: "inttest-basic"})
 	require.NoError(t, err)
 	assert.Equal(t, "inttest-basic", ws.Name)
-	assert.Equal(t, StatusActive, ws.Status)
+	assert.NotEmpty(t, ws.TmuxSession)
 
 	t.Cleanup(func() {
-		_, _ = m.Archive(ctx, ws.ID)
+		_ = m.Delete(ctx, ws.ID, true)
 	})
 
 	// Session should exist.
@@ -89,16 +89,17 @@ func TestIntegration_CreateAndArchive(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, exists)
 
-	// Archive.
-	archived, err := m.Archive(ctx, ws.ID)
-	require.NoError(t, err)
-	assert.Equal(t, StatusArchived, archived.Status)
-	assert.NotNil(t, archived.ArchivedAt)
+	// Delete.
+	require.NoError(t, m.Delete(ctx, ws.ID, true))
 
 	// Session should be gone.
 	exists, err = m.tmux.SessionExists(m.cfg.SessionPrefix, "inttest-basic")
 	require.NoError(t, err)
 	assert.False(t, exists)
+
+	// Store entry should be gone.
+	_, err = m.Get(ws.ID)
+	assert.ErrorIs(t, err, ErrNotFound)
 }
 
 func TestIntegration_Reconcile(t *testing.T) {
@@ -113,19 +114,19 @@ func TestIntegration_Reconcile(t *testing.T) {
 
 	t.Cleanup(func() {
 		_ = m.tmux.KillSession(ws.TmuxSession)
-		_, _ = m.Archive(ctx, ws.ID)
+		_ = m.Delete(ctx, ws.ID, true)
 	})
 
-	// Kill session directly to simulate an orphan.
+	// Kill session directly to simulate a missing session.
 	require.NoError(t, m.tmux.KillSession(ws.TmuxSession))
 
-	// Reconcile is now read-only; it logs discrepancies but does not write to the store.
+	// Reconcile is read-only; it logs discrepancies but does not write to the store.
 	require.NoError(t, m.Reconcile(ctx))
 
-	// The store record is unchanged; orphaned status is derived at query time via buildWorkspace.
+	// The store record is unchanged — workspace still exists.
 	reloaded, err := m.Get(ws.ID)
 	require.NoError(t, err)
-	assert.Equal(t, StatusOrphaned, reloaded.Status)
+	assert.Equal(t, ws.ID, reloaded.ID)
 }
 
 func TestIntegration_CapacityLimit(t *testing.T) {
@@ -152,7 +153,7 @@ func TestIntegration_CapacityLimit(t *testing.T) {
 
 	ws, err := m.Create(ctx, CreateOptions{Name: "cap-first"})
 	require.NoError(t, err)
-	t.Cleanup(func() { _, _ = m.Archive(ctx, ws.ID) })
+	t.Cleanup(func() { _ = m.Delete(ctx, ws.ID, true) })
 
 	_, err = m.Create(ctx, CreateOptions{Name: "cap-second"})
 	assert.ErrorIs(t, err, ErrCapacityReached)

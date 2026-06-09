@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -49,15 +48,10 @@ func newResolveManager(t *testing.T, workspaces []store.Workspace) *Manager {
 	)
 }
 
-func archivedAt() *time.Time {
-	t := time.Now()
-	return &t
-}
-
 func TestResolve_ExactID(t *testing.T) {
 	m := newResolveManager(t, []store.Workspace{
-		{ID: "aaaa-1111", Name: "alpha", ArchivedAt: archivedAt()},
-		{ID: "bbbb-2222", Name: "beta", ArchivedAt: archivedAt()},
+		{ID: "aaaa-1111", Name: "alpha"},
+		{ID: "bbbb-2222", Name: "beta"},
 	})
 	ws, err := m.Resolve("aaaa-1111")
 	require.NoError(t, err)
@@ -67,8 +61,8 @@ func TestResolve_ExactID(t *testing.T) {
 
 func TestResolve_ExactName(t *testing.T) {
 	m := newResolveManager(t, []store.Workspace{
-		{ID: "aaaa-1111", Name: "alpha", ArchivedAt: archivedAt()},
-		{ID: "bbbb-2222", Name: "beta", ArchivedAt: archivedAt()},
+		{ID: "aaaa-1111", Name: "alpha"},
+		{ID: "bbbb-2222", Name: "beta"},
 	})
 	ws, err := m.Resolve("alpha")
 	require.NoError(t, err)
@@ -77,8 +71,8 @@ func TestResolve_ExactName(t *testing.T) {
 
 func TestResolve_IDPrefix(t *testing.T) {
 	m := newResolveManager(t, []store.Workspace{
-		{ID: "aaaa-1111", Name: "alpha", ArchivedAt: archivedAt()},
-		{ID: "bbbb-2222", Name: "beta", ArchivedAt: archivedAt()},
+		{ID: "aaaa-1111", Name: "alpha"},
+		{ID: "bbbb-2222", Name: "beta"},
 	})
 	ws, err := m.Resolve("aaaa")
 	require.NoError(t, err)
@@ -87,8 +81,8 @@ func TestResolve_IDPrefix(t *testing.T) {
 
 func TestResolve_NamePrefix(t *testing.T) {
 	m := newResolveManager(t, []store.Workspace{
-		{ID: "aaaa-1111", Name: "alpha", ArchivedAt: archivedAt()},
-		{ID: "bbbb-2222", Name: "beta", ArchivedAt: archivedAt()},
+		{ID: "aaaa-1111", Name: "alpha"},
+		{ID: "bbbb-2222", Name: "beta"},
 	})
 	ws, err := m.Resolve("alp")
 	require.NoError(t, err)
@@ -97,8 +91,8 @@ func TestResolve_NamePrefix(t *testing.T) {
 
 func TestResolve_AmbiguousPrefix(t *testing.T) {
 	m := newResolveManager(t, []store.Workspace{
-		{ID: "aaaa-1111", Name: "alpha", ArchivedAt: archivedAt()},
-		{ID: "aaaa-2222", Name: "axle", ArchivedAt: archivedAt()},
+		{ID: "aaaa-1111", Name: "alpha"},
+		{ID: "aaaa-2222", Name: "axle"},
 	})
 	_, err := m.Resolve("aaaa")
 	require.Error(t, err)
@@ -107,28 +101,18 @@ func TestResolve_AmbiguousPrefix(t *testing.T) {
 
 func TestResolve_NotFound(t *testing.T) {
 	m := newResolveManager(t, []store.Workspace{
-		{ID: "aaaa-1111", Name: "alpha", ArchivedAt: archivedAt()},
+		{ID: "aaaa-1111", Name: "alpha"},
 	})
 	_, err := m.Resolve("ghost")
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrNotFound), "expected ErrNotFound, got: %v", err)
 }
 
-func TestResolve_IncludesArchived(t *testing.T) {
-	now := time.Now()
-	m := newResolveManager(t, []store.Workspace{
-		{ID: "aaaa-1111", Name: "alpha", ArchivedAt: &now},
-	})
-	ws, err := m.Resolve("alpha")
-	require.NoError(t, err)
-	assert.Equal(t, "aaaa-1111", ws.ID)
-}
-
 func TestResolve_DeduplicatesMultipleCriteriaMatch(t *testing.T) {
 	// A workspace whose name is also a prefix of its own ID should match only once.
 	m := newResolveManager(t, []store.Workspace{
-		{ID: "alpha-1111", Name: "alpha", ArchivedAt: archivedAt()},
-		{ID: "bbbb-2222", Name: "beta", ArchivedAt: archivedAt()},
+		{ID: "alpha-1111", Name: "alpha"},
+		{ID: "bbbb-2222", Name: "beta"},
 	})
 	ws, err := m.Resolve("alpha")
 	require.NoError(t, err)
