@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -26,6 +27,9 @@ func TestLoad_MissingFile(t *testing.T) {
 }
 
 func TestLoad_FromFile(t *testing.T) {
+	// Clear env so file values aren't overridden by the shell environment.
+	t.Setenv("HARNESS_REPO_PATH", "")
+
 	tmp := t.TempDir()
 	cfgData := map[string]interface{}{
 		"repoPath":        "/some/repo",
@@ -38,6 +42,11 @@ func TestLoad_FromFile(t *testing.T) {
 	require.NoError(t, err)
 	cfgFile := filepath.Join(tmp, "config.json")
 	require.NoError(t, os.WriteFile(cfgFile, data, 0o600))
+
+	// Stub auto-detection so the non-existent "/some/repo" isn't replaced.
+	orig := detectRepoPathFn
+	detectRepoPathFn = func() (string, error) { return "", errors.New("stubbed") }
+	t.Cleanup(func() { detectRepoPathFn = orig })
 
 	cfg, err := Load(cfgFile)
 	require.NoError(t, err)
@@ -165,4 +174,22 @@ func TestLoad_AutoDetectRepoPath(t *testing.T) {
 	assert.NotEmpty(t, cfg.RepoPath)
 	// StorePath should be local to the detected repo.
 	assert.Contains(t, cfg.StorePath, ".hangar")
+}
+
+func TestLoad_AutoDetectFails_RepoPathEmpty(t *testing.T) {
+	t.Setenv("HARNESS_REPO_PATH", "")
+
+	orig := detectRepoPathFn
+	detectRepoPathFn = func() (string, error) {
+		return "", errors.New("not a git repository")
+	}
+	t.Cleanup(func() { detectRepoPathFn = orig })
+
+	cfg, err := Load("")
+	require.NoError(t, err)
+	assert.Empty(t, cfg.RepoPath)
+
+	err = Validate(cfg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "auto-detected")
 }

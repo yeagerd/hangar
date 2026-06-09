@@ -66,7 +66,7 @@ func Load(configPath string) (*Config, error) {
 
 	// Auto-detect repoPath from git if not set by config or env.
 	if cfg.RepoPath == "" {
-		if detected, err := detectRepoPath(); err == nil {
+		if detected, err := detectRepoPathFn(); err == nil {
 			cfg.RepoPath = detected
 		}
 	}
@@ -166,6 +166,9 @@ func applyEnvInt(key string, dst *int) {
 		}
 	}
 }
+
+// detectRepoPathFn is a package-level variable so tests can substitute a fake.
+var detectRepoPathFn = detectRepoPath
 
 func detectRepoPath() (string, error) {
 	out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
