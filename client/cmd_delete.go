@@ -11,7 +11,9 @@ import (
 func cmdDelete(opts globalOpts, args []string) error {
 	fs := flag.NewFlagSet("harness-client delete", flag.ContinueOnError)
 	var confirm bool
+	var force bool
 	fs.BoolVar(&confirm, "confirm", false, "must be set to actually delete")
+	fs.BoolVar(&force, "force", false, "skip dirty/unpushed branch safety check")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -37,10 +39,14 @@ func cmdDelete(opts globalOpts, args []string) error {
 	}
 	defer cleanup()
 
-	raw, err := callTool(ctx, c, "workspace_delete", map[string]any{
+	toolArgs := map[string]any{
 		"id":      id,
 		"confirm": true,
-	})
+	}
+	if force {
+		toolArgs["force"] = true
+	}
+	raw, err := callTool(ctx, c, "workspace_delete", toolArgs)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "harness-client delete: %v\n", err)
 		return err

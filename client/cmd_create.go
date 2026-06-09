@@ -6,14 +6,28 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 )
+
+// metaValues implements flag.Value for repeated --meta key=value flags.
+type metaValues map[string]string
+
+func (m metaValues) String() string { return "" }
+func (m metaValues) Set(val string) error {
+	idx := strings.IndexByte(val, '=')
+	if idx < 0 {
+		return fmt.Errorf("meta must be in key=value format")
+	}
+	m[val[:idx]] = val[idx+1:]
+	return nil
+}
 
 func cmdCreate(opts globalOpts, args []string) error {
 	fs := flag.NewFlagSet("harness-client create", flag.ContinueOnError)
 	var branch string
-	var repo string
+	meta := make(metaValues)
 	fs.StringVar(&branch, "branch", "", "git branch to create or check out (defaults to name)")
-	fs.StringVar(&repo, "repo", "", "repo alias")
+	fs.Var(meta, "meta", "key=value metadata (repeatable: --meta k=v --meta k2=v2)")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -38,8 +52,12 @@ func cmdCreate(opts globalOpts, args []string) error {
 	if branch != "" {
 		toolArgs["branch"] = branch
 	}
-	if repo != "" {
-		toolArgs["repo"] = repo
+	if len(meta) > 0 {
+		m := make(map[string]any, len(meta))
+		for k, v := range meta {
+			m[k] = v
+		}
+		toolArgs["meta"] = m
 	}
 
 	raw, err := callTool(ctx, c, "workspace_create", toolArgs)

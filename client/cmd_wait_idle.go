@@ -6,27 +6,45 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 )
+
+// waitIdleIDs implements flag.Value for repeated --id flags.
+type waitIdleIDs []string
+
+func (w *waitIdleIDs) String() string { return strings.Join(*w, ",") }
+func (w *waitIdleIDs) Set(val string) error {
+	*w = append(*w, val)
+	return nil
+}
 
 func cmdWaitIdle(opts globalOpts, args []string) error {
 	fs := flag.NewFlagSet("harness-client wait-idle", flag.ContinueOnError)
+	var ids waitIdleIDs
+	var mode string
 	var timeoutMs int64
-	var thresholdMs int64
-	var pollIntervalMs int64
-	fs.Int64Var(&timeoutMs, "timeout-ms", 0, "maximum wait time in milliseconds (0 = server default)")
-	fs.Int64Var(&thresholdMs, "threshold-ms", 0, "idle threshold override in milliseconds (0 = server default)")
-	fs.Int64Var(&pollIntervalMs, "poll-interval-ms", 0, "poll interval in milliseconds (0 = server default)")
+	fs.Var(&ids, "id", "workspace ID to watch (repeatable; at least one required)")
+	fs.StringVar(&mode, "mode", "all", `wait mode: "all" (every workspace idle) or "any" (at least one idle)`)
+	fs.Int64Var(&timeoutMs, "timeout-ms", 0, "maximum wait time in milliseconds (0 = server default of 10 min)")
 
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
-	if fs.NArg() == 0 {
-		fmt.Fprintf(os.Stderr, "harness-client wait-idle: id is required\n")
+	// Positional args also treated as IDs for convenience.
+	for _, a := range fs.Args() {
+		ids = append(ids, a)
+	}
+
+	if len(ids) == 0 {
+		fmt.Fprintf(os.Stderr, "harness-client wait-idle: at least one --id (or positional arg) is required\n")
 		fs.Usage()
 		os.Exit(1)
 	}
-	id := fs.Arg(0)
+	if mode != "all" && mode != "any" {
+		fmt.Fprintf(os.Stderr, "harness-client wait-idle: mode must be \"all\" or \"any\"\n")
+		os.Exit(1)
+	}
 
 	ctx := context.Background()
 	c, cleanup, err := connect(ctx, opts)
@@ -36,15 +54,16 @@ func cmdWaitIdle(opts globalOpts, args []string) error {
 	}
 	defer cleanup()
 
-	toolArgs := map[string]any{"id": id}
+	idsAny := make([]any, len(ids))
+	for i, id := range ids {
+		idsAny[i] = id
+	}
+	toolArgs := map[string]any{
+		"ids":  idsAny,
+		"mode": mode,
+	}
 	if timeoutMs > 0 {
 		toolArgs["timeout_ms"] = timeoutMs
-	}
-	if thresholdMs > 0 {
-		toolArgs["threshold_ms"] = thresholdMs
-	}
-	if pollIntervalMs > 0 {
-		toolArgs["poll_interval_ms"] = pollIntervalMs
 	}
 
 	raw, err := callTool(ctx, c, "workspace_wait_idle", toolArgs)
@@ -58,20 +77,24 @@ func cmdWaitIdle(opts globalOpts, args []string) error {
 	}
 
 	var result struct {
-		Idle     bool `json:"idle"`
-		TimedOut bool `json:"timed_out"`
+		TimedOut bool                              `json:"timed_out"`
+		Results  map[string]struct{ Idle bool `json:"idle"` } `json:"results"`
 	}
 	if err := json.Unmarshal(raw, &result); err != nil {
 		fmt.Fprintf(os.Stderr, "harness-client wait-idle: parsing response: %v\n", err)
 		return err
 	}
 
-	if result.Idle && !result.TimedOut {
-		fmt.Println("idle")
-		return nil
+	for id, entry := range result.Results {
+		status := "busy"
+		if entry.Idle {
+			status = "idle"
+		}
+		fmt.Printf("%s: %s\n", id, status)
 	}
-
-	fmt.Println("timed out")
-	os.Exit(2)
+	if result.TimedOut {
+		fmt.Fprintln(os.Stderr, "timed out")
+		os.Exit(2)
+	}
 	return nil
 }
