@@ -359,6 +359,7 @@ func Register(s *server.MCPServer, mgr Manager, capture PaneCapture, storeUpd St
 		),
 		mcp.WithBoolean("press_enter",
 			mcp.Description("Append Enter keystroke (default true)"),
+			mcp.DefaultBool(true),
 		),
 	), func(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		id, err := req.RequireString("id")

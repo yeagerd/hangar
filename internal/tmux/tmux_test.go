@@ -3,6 +3,7 @@ package tmux
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -139,7 +140,19 @@ func TestSendKeys_Happy(t *testing.T) {
 	// Text sent in first call, Enter sent separately in second call.
 	require.Len(t, m.calls, 2)
 	assert.Equal(t, []string{"tmux", "send-keys", "-t", "harness-test", "hello"}, m.calls[0])
-	assert.Equal(t, []string{"tmux", "send-keys", "-t", "harness-test", "", "Enter"}, m.calls[1])
+	assert.Equal(t, []string{"tmux", "send-keys", "-t", "harness-test", "Enter"}, m.calls[1])
+}
+
+func TestSendKeys_LongInput(t *testing.T) {
+	m := &mockExecutor{}
+	c := NewWithExecutor(m)
+	longText := strings.Repeat("a", pasteFlushThreshold+1)
+	err := c.SendKeys("harness-test", longText, true)
+	require.NoError(t, err)
+	// Long input still produces exactly two send-keys calls: text then Enter.
+	require.Len(t, m.calls, 2)
+	assert.Equal(t, []string{"tmux", "send-keys", "-t", "harness-test", longText}, m.calls[0])
+	assert.Equal(t, []string{"tmux", "send-keys", "-t", "harness-test", "Enter"}, m.calls[1])
 }
 
 func TestSendKeys_NoEnter(t *testing.T) {

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // ErrSessionNotFound is returned when a named tmux session does not exist.
@@ -88,6 +89,11 @@ func (c *Client) KillSession(sessionName string) error {
 	return nil
 }
 
+// pasteFlushThreshold is the minimum text length that triggers a brief pause before
+// sending Enter. For large pastes tmux's server may still be processing the text
+// when a back-to-back send-keys call arrives; the sleep lets the pipe drain.
+const pasteFlushThreshold = 200
+
 // SendKeys sends text to the named session. If pressEnter is true, an Enter keystroke is sent
 // as a separate tmux send-keys call after the text, so that pasted multi-line input is
 // submitted rather than left buffered in the terminal's paste queue.
@@ -100,7 +106,10 @@ func (c *Client) SendKeys(sessionName, text string, pressEnter bool) error {
 		return fmt.Errorf("tmux send-keys %q: %w (output: %s)", sessionName, err, out)
 	}
 	if pressEnter {
-		out, err = c.exec.Run("tmux", "send-keys", "-t", sessionName, "", "Enter")
+		if len(text) > pasteFlushThreshold {
+			time.Sleep(50 * time.Millisecond)
+		}
+		out, err = c.exec.Run("tmux", "send-keys", "-t", sessionName, "Enter")
 		if err != nil {
 			if isSessionNotFound(out, err) {
 				return fmt.Errorf("%w: %s", ErrSessionNotFound, sessionName)
