@@ -76,6 +76,11 @@ type workspaceSummary struct {
 	TmuxSession  string                `json:"tmuxSession"`
 	CreatedAt    time.Time             `json:"createdAt"`
 	WorktreePath string                `json:"worktreePath"`
+	// Idle fields are populated only for active workspaces when check_idle=true.
+	IdleStatus    *bool      `json:"idleStatus,omitempty"`
+	LastChangedAt *time.Time `json:"lastChangedAt,omitempty"`
+	ElapsedMs     *int64     `json:"elapsedMs,omitempty"`
+	ThresholdMs   *int64     `json:"thresholdMs,omitempty"`
 }
 
 func toSummary(ws store.Workspace) workspaceSummary {
