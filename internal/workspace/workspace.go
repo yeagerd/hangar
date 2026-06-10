@@ -14,10 +14,17 @@ import (
 	"time"
 
 	"github.com/yeagerd/hangar/internal/config"
+	"github.com/yeagerd/hangar/internal/idle"
 	"github.com/yeagerd/hangar/internal/store"
 	"github.com/yeagerd/hangar/internal/tmux"
 	"github.com/yeagerd/hangar/internal/worktree"
 )
+
+// nopUpdater satisfies idle.WorkspaceUpdater during workspace creation, before the
+// workspace has been registered in the store.
+type nopUpdater struct{}
+
+func (nopUpdater) UpdateIdleState(string, string, time.Time) error { return nil }
 
 var validName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$|^[a-z0-9]$`)
 
@@ -36,6 +43,7 @@ type CreateOptions struct {
 	Name   string
 	Branch string
 	Meta   map[string]string
+	Prompt string
 }
 
 // Manager is the high-level workspace coordinator.
@@ -99,6 +107,15 @@ func (m *Manager) Create(ctx context.Context, opts CreateOptions) (Workspace, er
 		_ = m.tmux.KillSession(sessionName)
 		_ = m.worktree.Remove(worktreePath, true)
 		return Workspace{}, fmt.Errorf("launching claude: %w", err)
+	}
+
+	// Step 3.5: if a prompt was supplied, wait for Claude to become idle then send it.
+	if opts.Prompt != "" {
+		wsState := idle.WorkspaceState{TmuxSession: sessionName}
+		_, _ = idle.WaitUntilIdle(ctx, wsState, m.tmux, nopUpdater{}, int64(m.cfg.IdleThresholdMs), 30_000, 500)
+		if err := m.tmux.SendKeys(sessionName, opts.Prompt, true); err != nil {
+			fmt.Fprintf(os.Stderr, "create: sending initial prompt: %v\n", err)
+		}
 	}
 
 	// Step 4: register in store. TmuxSession and WorktreePath are derived at query time

@@ -135,6 +135,7 @@ Create a new workspace: git worktree + tmux session + Claude Code instance.
 - `name` (string, required) — lowercase alphanumeric and hyphens, 1–40 chars
 - `branch` (string, optional) — git branch to create; defaults to `name`
 - `meta` (object, optional) — freeform string key-value metadata
+- `prompt` (string, optional) — first prompt to send to Claude; the server waits up to 30 s for Claude to finish starting before sending, eliminating the need for a separate `workspace_send` call
 
 **Output:** Full workspace object as JSON.
 
@@ -229,11 +230,10 @@ Human ──► tmux attach-session -t harness-<name>  (at any time)
 
 **Typical single-worker flow:**
 
-1. `workspace_create {name: "feat-foo"}` — workspace created, Claude Code launches.
-2. `workspace_send {id: ..., text: "Implement feature X"}` — prompt sent.
-3. `workspace_read {id: ..., lines: 500}` — blocks until pane is stable (`wait_idle` defaults to true), then returns output.
-4. Inspect output; optionally send follow-up with `workspace_send` + another `workspace_read`.
-5. `workspace_delete {id: ...}` when done.
+1. `workspace_create {name: "feat-foo", prompt: "Implement feature X"}` — workspace created, Claude Code launches, and the first prompt is sent in one call.
+2. `workspace_read {id: ..., lines: 500}` — blocks until pane is stable (`wait_idle` defaults to true), then returns output.
+3. Inspect output; optionally send follow-up with `workspace_send` + another `workspace_read`.
+4. `workspace_delete {id: ...}` when done.
 
 **Fan-out (parallel workers):**
 
