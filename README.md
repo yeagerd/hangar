@@ -189,6 +189,8 @@ Permanently delete a workspace and its git branch. **Irreversible.**
 
 **Inputs:**
 - `id` (string, required)
+- `confirm` (bool, required) — must be `true`
+- `force` (bool, optional) — skip dirty/unpushed branch safety check
 
 **Output:** `{"deleted": true, "id": "<id>"}`
 
