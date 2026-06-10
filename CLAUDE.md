@@ -77,10 +77,6 @@ All packages under `internal/` are unexported. The binary is the only artifact.
 - Integration tests must carry `//go:build integration` build tag and clean up after themselves.
 - The store's `flush()` must write to `<path>.tmp` then `os.Rename` atomically — never write directly.
 
-## Task List Workflow
-
-The project plan in `tmux-claude-harness-project-plan-2.md` contains phases with checkbox task lists. Work through them **one task at a time** in order.
-
 ### Process for each task
 
 1. **Implement** — make the minimum change required by the task. No scope creep; no speculative additions.
