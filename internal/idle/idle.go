@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"os"
-	"strings"
 	"sync"
 	"time"
 )
@@ -367,55 +366,3 @@ func hashContent(content string) string {
 	return fmt.Sprintf("%x", sum)
 }
 
-// looksIdle reports whether the last non-empty line of pane output ends with a prompt suffix.
-// Used as a heuristic only — do not rely on this alone.
-func looksIdle(content, promptSuffix string) bool {
-	lines := strings.Split(strings.TrimRight(content, "\n"), "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
-		if strings.TrimSpace(lines[i]) != "" {
-			return strings.HasSuffix(lines[i], promptSuffix)
-		}
-	}
-	return false
-}
-
-// CheckWithPromptHeuristic is like Check but also uses the last-line prompt heuristic as a
-// tiebreaker when elapsed is between 80% and 100% of the threshold.
-func CheckWithPromptHeuristic(
-	ctx context.Context,
-	ws WorkspaceState,
-	capture PaneCapture,
-	updater WorkspaceUpdater,
-	thresholdMs int64,
-	promptSuffix string,
-) (IdleStatus, error) {
-	content, err := capture.CapturePane(ws.TmuxSession, 200)
-	if err != nil {
-		return IdleStatus{}, fmt.Errorf("capturing pane for %s: %w", ws.Name, err)
-	}
-
-	hash := hashContent(content)
-
-	if hash != ws.LastCaptureHash {
-		now := time.Now()
-		if err := updater.UpdateIdleState(ws.ID, hash, now); err != nil {
-			return IdleStatus{}, fmt.Errorf("updating workspace hash: %w", err)
-		}
-		return IdleStatus{Idle: false, LastChangedAt: now, ElapsedMs: 0, ThresholdMs: thresholdMs}, nil
-	}
-
-	elapsed := time.Since(ws.LastChangedAt).Milliseconds()
-	isIdle := elapsed >= thresholdMs
-
-	// Tiebreaker: if within 80–100% of threshold, use prompt heuristic.
-	if !isIdle && elapsed >= (thresholdMs*80/100) {
-		isIdle = looksIdle(content, promptSuffix)
-	}
-
-	return IdleStatus{
-		Idle:          isIdle,
-		LastChangedAt: ws.LastChangedAt,
-		ElapsedMs:     elapsed,
-		ThresholdMs:   thresholdMs,
-	}, nil
-}

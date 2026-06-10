@@ -86,20 +86,10 @@ func toSummary(ws workspace.Workspace) workspaceSummary {
 	}
 }
 
-// waitIdleMultiResult is the JSON shape returned by workspace_wait_idle.
-type waitIdleMultiResult struct {
-	TimedOut bool                 `json:"timed_out"`
-	Results  map[string]idleEntry `json:"results"`
-}
-
 // listWaitResult is the JSON shape returned by workspace_list when a wait flag is set.
 type listWaitResult struct {
 	TimedOut   bool               `json:"timed_out"`
 	Workspaces []workspaceSummary `json:"workspaces"`
-}
-
-type idleEntry struct {
-	Idle bool `json:"idle"`
 }
 
 // readResult is the JSON shape returned by workspace_read.
@@ -410,86 +400,6 @@ func Register(s *server.MCPServer, mgr Manager, capture PaneCapture, storeUpd St
 		})
 	})
 
-	// workspace_wait_idle
-	s.AddTool(mcp.NewTool("workspace_wait_idle",
-		mcp.WithDescription("Block until the specified workspaces are idle or the timeout elapses. "+
-			"Returns a map of workspace ID → idle status."),
-		mcp.WithArray("ids",
-			mcp.Required(),
-			mcp.Description("List of workspace IDs to watch"),
-			mcp.WithStringItems(),
-		),
-		mcp.WithString("mode",
-			mcp.Description(`"all" (default): wait until every workspace is idle. "any": return as soon as at least one is idle.`),
-		),
-		mcp.WithNumber("timeout_ms",
-			mcp.Description("Maximum time to wait in milliseconds (default 600000 = 10 min)"),
-		),
-	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		rawIDs, ok := req.GetArguments()["ids"]
-		if !ok || rawIDs == nil {
-			return mcp.NewToolResultError("ids is required"), nil
-		}
-		idsRaw, ok := rawIDs.([]any)
-		if !ok || len(idsRaw) == 0 {
-			return mcp.NewToolResultError("ids must be a non-empty array of strings"), nil
-		}
-		ids := make([]string, len(idsRaw))
-		for i, v := range idsRaw {
-			s, ok := v.(string)
-			if !ok {
-				return mcp.NewToolResultError(fmt.Sprintf("ids[%d] must be a string", i)), nil
-			}
-			ids[i] = s
-		}
-
-		mode := req.GetString("mode", "all")
-		if mode != "all" && mode != "any" {
-			return mcp.NewToolResultError(`mode must be "all" or "any"`), nil
-		}
-		timeoutMs := int64(req.GetFloat("timeout_ms", 600_000))
-
-		wsStates := make([]idle.WorkspaceState, 0, len(ids))
-		for _, id := range ids {
-			ws, err := mgr.Resolve(id)
-			if err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("workspace not found: %s", id)), nil
-			}
-			wsStates = append(wsStates, idle.WorkspaceState{
-				ID: ws.ID, Name: ws.Name, TmuxSession: ws.TmuxSession,
-				LastCaptureHash: ws.LastCaptureHash, LastChangedAt: ws.LastChangedAt,
-			})
-		}
-
-		idleMap, timedOut := idle.WaitUntilIdleMulti(ctx, wsStates, capture, storeUpd, defaultThresholdMs, timeoutMs, mode)
-
-		resultItems := make(map[string]idleEntry, len(idleMap))
-		for id, isIdle := range idleMap {
-			resultItems[id] = idleEntry{Idle: isIdle}
-		}
-		return jsonText(waitIdleMultiResult{TimedOut: timedOut, Results: resultItems})
-	})
-
-	// workspace_attach_hint
-	s.AddTool(mcp.NewTool("workspace_attach_hint",
-		mcp.WithDescription("Return the shell command a human should run to attach to this workspace's tmux session."),
-		mcp.WithString("id",
-			mcp.Required(),
-			mcp.Description("Workspace ID, name, or unique prefix of either"),
-		),
-	), func(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		id, err := req.RequireString("id")
-		if err != nil {
-			return mcp.NewToolResultError("id is required"), nil
-		}
-		ws, err := mgr.Resolve(id)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("workspace not found: %s", id)), nil
-		}
-		return jsonText(map[string]string{
-			"command": fmt.Sprintf("tmux attach-session -t %s", ws.TmuxSession),
-		})
-	})
 }
 
 // sanitizeText scans for ASCII control characters (0x00–0x1f) excluding \n and \t.

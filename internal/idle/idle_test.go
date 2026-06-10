@@ -122,41 +122,6 @@ func TestCheck_UpdateError(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestLooksIdle(t *testing.T) {
-	assert.True(t, looksIdle("doing stuff\n> ", "> "))
-	assert.False(t, looksIdle("doing stuff\nprocessing...", "> "))
-	assert.False(t, looksIdle("", "> "))
-}
-
-func TestCheckWithPromptHeuristic_TiebreakerIdle(t *testing.T) {
-	// Hash stable, elapsed is at 85% of threshold, but prompt looks idle → idle.
-	content := "some work done\n> "
-	h := hashContent(content)
-	cap := &mockCapture{content: content}
-	upd := &mockUpdater{}
-	thresholdMs := int64(5000)
-	// 85% of 5000ms = 4250ms elapsed.
-	ws := newWS(h, time.Now().Add(-4250*time.Millisecond))
-
-	status, err := CheckWithPromptHeuristic(context.Background(), ws, cap, upd, thresholdMs, "> ")
-	require.NoError(t, err)
-	assert.True(t, status.Idle)
-}
-
-func TestCheckWithPromptHeuristic_TiebreakerBusy(t *testing.T) {
-	// Hash stable, elapsed is at 85% of threshold, prompt does NOT look idle → not idle.
-	content := "processing..."
-	h := hashContent(content)
-	cap := &mockCapture{content: content}
-	upd := &mockUpdater{}
-	thresholdMs := int64(5000)
-	ws := newWS(h, time.Now().Add(-4250*time.Millisecond))
-
-	status, err := CheckWithPromptHeuristic(context.Background(), ws, cap, upd, thresholdMs, "> ")
-	require.NoError(t, err)
-	assert.False(t, status.Idle)
-}
-
 // captureEntry is the per-session result used by multiCapture.
 type captureEntry struct {
 	content string
@@ -279,7 +244,6 @@ func TestWaitUntilIdle_AlreadyIdle(t *testing.T) {
 	h := hashContent(content)
 	cap := &mockCapture{content: content}
 	upd := &mockUpdater{}
-	// Already past threshold.
 	ws := newWS(h, time.Now().Add(-10*time.Second))
 
 	status, err := WaitUntilIdle(context.Background(), ws, cap, upd, 200, 5000, 50)
@@ -292,19 +256,16 @@ func TestWaitUntilIdle_BecomesIdleAfterTicks(t *testing.T) {
 	h := hashContent(content)
 	cap := &mockCapture{content: content}
 	upd := &mockUpdater{}
-	// Not yet past threshold — needs ~3 polls at 50 ms each to accumulate 150 ms.
 	ws := newWS(h, time.Now().Add(-50*time.Millisecond))
 
 	start := time.Now()
 	status, err := WaitUntilIdle(context.Background(), ws, cap, upd, 150, 5000, 50)
 	require.NoError(t, err)
 	assert.True(t, status.Idle)
-	// Should have waited at least one poll interval.
 	assert.GreaterOrEqual(t, time.Since(start).Milliseconds(), int64(50))
 }
 
 func TestWaitUntilIdle_Timeout(t *testing.T) {
-	// Content keeps changing → never idle.
 	cap := &toggleCapture{toggle: [2]string{"a\n", "b\n"}, stableN: 1000}
 	upd := &mockUpdater{}
 	ws := newWS("", time.Now())
@@ -312,6 +273,22 @@ func TestWaitUntilIdle_Timeout(t *testing.T) {
 	_, err := WaitUntilIdle(context.Background(), ws, cap, upd, 200, 120, 50)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, context.DeadlineExceeded)
+}
+
+func TestWaitUntilIdle_CtxCancellation(t *testing.T) {
+	cap := &toggleCapture{toggle: [2]string{"a\n", "b\n"}, stableN: 1000}
+	upd := &mockUpdater{}
+	ws := newWS("", time.Now())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(80 * time.Millisecond)
+		cancel()
+	}()
+
+	_, err := WaitUntilIdle(ctx, ws, cap, upd, 200, 60_000, 50)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.Canceled)
 }
 
 func TestWaitUntilIdleMulti_AllMode_BothIdle(t *testing.T) {
@@ -371,18 +348,3 @@ func TestWaitUntilIdleMulti_Timeout(t *testing.T) {
 	assert.False(t, results["ws-1"])
 }
 
-func TestWaitUntilIdle_CtxCancellation(t *testing.T) {
-	cap := &toggleCapture{toggle: [2]string{"a\n", "b\n"}, stableN: 1000}
-	upd := &mockUpdater{}
-	ws := newWS("", time.Now())
-
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		time.Sleep(80 * time.Millisecond)
-		cancel()
-	}()
-
-	_, err := WaitUntilIdle(ctx, ws, cap, upd, 200, 60_000, 50)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, context.Canceled)
-}

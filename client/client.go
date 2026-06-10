@@ -79,10 +79,6 @@ func Execute(args []string) error {
 		return cmdRead(opts, subArgs)
 	case "idle":
 		return cmdIdle(opts, subArgs)
-	case "wait-idle":
-		return cmdWaitIdle(opts, subArgs)
-	case "attach-hint":
-		return cmdAttachHint(opts, subArgs)
 	default:
 		fmt.Fprintf(os.Stderr, "harness-client: unknown subcommand %q\n\n", subcommand)
 		printUsage()
@@ -110,8 +106,6 @@ Subcommands:
   send          Send text to a workspace session
   read          Read terminal output from a workspace
   idle          Check whether a workspace is idle
-  wait-idle     Wait until a workspace becomes idle
-  attach-hint   Print the tmux attach command for a workspace
 
 Flags:
   --config <path>   Path to config JSON file passed to hangar
