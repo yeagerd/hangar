@@ -5,6 +5,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -12,10 +13,10 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/yeagerd/hangar/internal/idle"
-	"github.com/yeagerd/hangar/internal/workspace"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+	"github.com/yeagerd/hangar/internal/idle"
+	"github.com/yeagerd/hangar/internal/workspace"
 )
 
 // Manager is the interface the tool handlers use to access workspace operations.
@@ -102,9 +103,39 @@ type readResult struct {
 func jsonText(v any) (*mcp.CallToolResult, error) {
 	b, err := json.Marshal(v)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("internal: marshaling result: %v", err)), nil
+		return toolError("internal", fmt.Sprintf("internal: marshaling result: %v", err)), nil
 	}
 	return mcp.NewToolResultText(string(b)), nil
+}
+
+type toolErrorResponse struct {
+	Error   bool   `json:"error"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// toolError returns a structured error as tool result text so callers can branch on code.
+func toolError(code, message string) *mcp.CallToolResult {
+	b, _ := json.Marshal(toolErrorResponse{Error: true, Code: code, Message: message})
+	return mcp.NewToolResultText(string(b))
+}
+
+// errorCode maps sentinel workspace errors to their structured error codes.
+func errorCode(err error) string {
+	switch {
+	case errors.Is(err, workspace.ErrNotFound):
+		return "not_found"
+	case errors.Is(err, workspace.ErrInvalidName):
+		return "invalid_name"
+	case errors.Is(err, workspace.ErrCapacityReached):
+		return "capacity_reached"
+	case errors.Is(err, workspace.ErrDeleteNotConfirmed):
+		return "delete_not_confirmed"
+	case errors.Is(err, workspace.ErrAmbiguous):
+		return "ambiguous"
+	default:
+		return "internal"
+	}
 }
 
 // Register adds all workspace tools and the pane resource template to s.
@@ -159,7 +190,7 @@ func Register(s *server.MCPServer, mgr Manager, capture PaneCapture, storeUpd St
 		timeoutMs := int64(req.GetFloat("timeout_ms", 600_000))
 
 		if waitAny && waitAll {
-			return mcp.NewToolResultError("wait_any_idle and wait_all_idle are mutually exclusive"), nil
+			return toolError("internal", "wait_any_idle and wait_all_idle are mutually exclusive"), nil
 		}
 
 		workspaces := mgr.List()
@@ -219,7 +250,7 @@ func Register(s *server.MCPServer, mgr Manager, capture PaneCapture, storeUpd St
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		name, err := req.RequireString("name")
 		if err != nil {
-			return mcp.NewToolResultError("name is required"), nil
+			return toolError("internal", "name is required"), nil
 		}
 		branch := req.GetString("branch", "")
 
@@ -235,7 +266,7 @@ func Register(s *server.MCPServer, mgr Manager, capture PaneCapture, storeUpd St
 
 		ws, err := mgr.Create(ctx, workspace.CreateOptions{Name: name, Branch: branch, Meta: meta})
 		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
+			return toolError(errorCode(err), err.Error()), nil
 		}
 		return jsonText(ws)
 	})
@@ -257,16 +288,16 @@ func Register(s *server.MCPServer, mgr Manager, capture PaneCapture, storeUpd St
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		id, err := req.RequireString("id")
 		if err != nil {
-			return mcp.NewToolResultError("id is required"), nil
+			return toolError("internal", "id is required"), nil
 		}
 		confirm := req.GetBool("confirm", false)
 		force := req.GetBool("force", false)
 		resolved, err := mgr.Resolve(id)
 		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
+			return toolError(errorCode(err), err.Error()), nil
 		}
 		if err := mgr.Delete(ctx, resolved.ID, confirm, force); err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
+			return toolError(errorCode(err), err.Error()), nil
 		}
 		return jsonText(map[string]any{"deleted": true, "id": resolved.ID})
 	})
@@ -289,37 +320,33 @@ func Register(s *server.MCPServer, mgr Manager, capture PaneCapture, storeUpd St
 	), func(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		id, err := req.RequireString("id")
 		if err != nil {
-			return mcp.NewToolResultError("id is required"), nil
+			return toolError("internal", "id is required"), nil
 		}
 		text, err := req.RequireString("text")
 		if err != nil {
-			return mcp.NewToolResultError("text is required"), nil
+			return toolError("internal", "text is required"), nil
 		}
 		pressEnter := req.GetBool("press_enter", true)
 
 		ws, err := mgr.Resolve(id)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("workspace not found: %s", id)), nil
+			return toolError(errorCode(err), err.Error()), nil
 		}
 
 		// Reject text with ASCII control characters (except \n and \t).
 		if _, hadInvalid := sanitizeText(text); hadInvalid {
-			return mcp.NewToolResultError(
-				"text contains invalid ASCII control characters (0x00–0x1f, except \\n and \\t)",
-			), nil
+			return toolError("internal", "text contains invalid ASCII control characters (0x00–0x1f, except \\n and \\t)"), nil
 		}
 
 		// Rate limiting: max one send per workspace per 200 ms.
 		retryAfterMs, ok := rl.check(ws.ID)
 		if !ok {
-			return mcp.NewToolResultError(
-				fmt.Sprintf(`{"error":"rate limited","retry_after_ms":%d}`, retryAfterMs),
-			), nil
+			return toolError("internal", fmt.Sprintf("rate limited: retry after %d ms", retryAfterMs)), nil
 		}
 
 		if err := mgr.SendKeys(ws.ID, text, pressEnter); err != nil {
 			fmt.Fprintf(os.Stderr, "workspace_send: error: %v\n", err)
-			return mcp.NewToolResultError(fmt.Sprintf("send failed: %v", err)), nil
+			return toolError("internal", fmt.Sprintf("send failed: %v", err)), nil
 		}
 
 		return jsonText(map[string]bool{"sent": true})
@@ -344,7 +371,7 @@ func Register(s *server.MCPServer, mgr Manager, capture PaneCapture, storeUpd St
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		id, err := req.RequireString("id")
 		if err != nil {
-			return mcp.NewToolResultError("id is required"), nil
+			return toolError("internal", "id is required"), nil
 		}
 		lines := int(req.GetFloat("lines", 200))
 		if lines < 1 {
@@ -358,7 +385,7 @@ func Register(s *server.MCPServer, mgr Manager, capture PaneCapture, storeUpd St
 
 		ws, err := mgr.Resolve(id)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("workspace not found: %s", id)), nil
+			return toolError(errorCode(err), err.Error()), nil
 		}
 
 		wsState := idle.WorkspaceState{
@@ -380,7 +407,7 @@ func Register(s *server.MCPServer, mgr Manager, capture PaneCapture, storeUpd St
 		content, err := capture.CapturePane(ws.TmuxSession, lines)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "workspace_read: capture error: %v\n", err)
-			return mcp.NewToolResultError(fmt.Sprintf("capture failed: %v", err)), nil
+			return toolError("internal", fmt.Sprintf("capture failed: %v", err)), nil
 		}
 
 		if !waitIdle {
