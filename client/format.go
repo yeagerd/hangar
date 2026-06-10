@@ -18,6 +18,14 @@ type workspaceSummary struct {
 	IdleStatus   *bool     `json:"idleStatus,omitempty"`
 }
 
+// listResult mirrors the JSON envelope returned by workspace_list.
+type listResult struct {
+	MaxWorkspaces int                `json:"max_workspaces"`
+	ActiveCount   int                `json:"active_count"`
+	TimedOut      bool               `json:"timed_out"`
+	Workspaces    []workspaceSummary `json:"workspaces"`
+}
+
 // errWriter accumulates the first write error and short-circuits subsequent writes.
 type errWriter struct {
 	w   io.Writer
