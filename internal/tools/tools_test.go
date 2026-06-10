@@ -150,6 +150,22 @@ func textContent(t *testing.T, result *mcp.CallToolResult) string {
 	return tc.Text
 }
 
+type toolErrJSON struct {
+	Error   bool   `json:"error"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+func assertToolError(t *testing.T, result *mcp.CallToolResult, wantCode string) toolErrJSON {
+	t.Helper()
+	assert.False(t, result.IsError, "expected structured error text, not mcp transport error")
+	var e toolErrJSON
+	require.NoError(t, json.Unmarshal([]byte(textContent(t, result)), &e))
+	assert.True(t, e.Error, "expected error=true in JSON")
+	assert.Equal(t, wantCode, e.Code)
+	return e
+}
+
 func paneHash(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return fmt.Sprintf("%x", sum)
@@ -248,7 +264,7 @@ func TestWorkspaceList_InvalidWaitForIdle_Error(t *testing.T) {
 	result := callTool(t, s, "workspace_list", map[string]any{
 		"wait_for_idle": "bogus",
 	})
-	assert.True(t, result.IsError)
+	assertToolError(t, result, "internal")
 }
 
 func TestWorkspaceCreate_Happy(t *testing.T) {
@@ -263,7 +279,7 @@ func TestWorkspaceCreate_Happy(t *testing.T) {
 func TestWorkspaceCreate_MissingName(t *testing.T) {
 	s := newTestServer(&mockManager{}, &mockPaneCapture{}, &mockStoreUpdater{})
 	result := callTool(t, s, "workspace_create", map[string]any{})
-	assert.True(t, result.IsError)
+	assertToolError(t, result, "internal")
 }
 
 func TestWorkspaceDelete_Confirmed(t *testing.T) {
@@ -282,7 +298,7 @@ func TestWorkspaceDelete_NotConfirmed(t *testing.T) {
 	}}
 	s := newTestServer(mgr, &mockPaneCapture{}, &mockStoreUpdater{})
 	result := callTool(t, s, "workspace_delete", map[string]any{"id": "ws-1", "confirm": false})
-	assert.True(t, result.IsError)
+	assertToolError(t, result, "delete_not_confirmed")
 	assert.Len(t, mgr.workspaces, 1)
 }
 
@@ -313,7 +329,7 @@ func TestWorkspaceSend_ControlChars(t *testing.T) {
 	}}
 	s := newTestServer(mgr, &mockPaneCapture{}, &mockStoreUpdater{})
 	result := callTool(t, s, "workspace_send", map[string]any{"id": "ws-1", "text": "hello\x01world"})
-	assert.True(t, result.IsError)
+	assertToolError(t, result, "internal")
 }
 
 func TestWorkspaceRead_Happy(t *testing.T) {
