@@ -225,12 +225,16 @@ func Register(s *server.MCPServer, mgr Manager, capture PaneCapture, storeUpd St
 		mcp.WithObject("meta",
 			mcp.Description("Freeform string key-value metadata"),
 		),
+		mcp.WithString("prompt",
+			mcp.Description("Optional first prompt to send to Claude after it finishes starting up (waits up to 30 s for Claude to become idle before sending)"),
+		),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		name, err := req.RequireString("name")
 		if err != nil {
 			return mcp.NewToolResultError("name is required"), nil
 		}
 		branch := req.GetString("branch", "")
+		prompt := req.GetString("prompt", "")
 
 		var meta map[string]string
 		if raw, ok := req.GetArguments()["meta"]; ok && raw != nil {
@@ -242,7 +246,7 @@ func Register(s *server.MCPServer, mgr Manager, capture PaneCapture, storeUpd St
 			}
 		}
 
-		ws, err := mgr.Create(ctx, workspace.CreateOptions{Name: name, Branch: branch, Meta: meta})
+		ws, err := mgr.Create(ctx, workspace.CreateOptions{Name: name, Branch: branch, Meta: meta, Prompt: prompt})
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
